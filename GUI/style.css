@@ -456,16 +456,16 @@ button.set-val:hover {
 /* POPUP FOR ERRORS */
 
 .popup {
-  border-radius: 6px;
-  padding: 36px 34px 34px 36px;
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
-  -webkit-transform: translateX(-50%) translateY(-50%);
-  transform: translateX(-50%) translateY(-50%);
-  -webkit-transform: .2s;
-  transform: .2s;
+	border-radius: 6px;
+	padding: 36px 34px 34px 36px;
+	position: absolute;
+	z-index: 1;
+	top: 50%;
+	left: 50%;
+	-webkit-transform: translateX(-50%) translateY(-50%);
+	transform: translateX(-50%) translateY(-50%);
+	-webkit-transform: .2s;
+	transform: .2s;
 }
 .popup.error {
 	display: none;
@@ -476,7 +476,7 @@ button.set-val:hover {
 .popup.confirm {
 	display: none;
 	background-color: #2c2c2c;
-	width: 400px;
+	width: 420px;
 	z-index: 1;
 }
 .popup.settings {
@@ -628,27 +628,27 @@ button.set-val:hover {
 
 @font-face {
     font-family: 'Roboto';
-    src: url('Roboto/Roboto-Regular.ttf') format('truetype');
+    src: url('fonts/Roboto-Regular.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
 }
 @font-face {
     font-family: 'Roboto-medium';
-    src: url('Roboto/Roboto-Medium.ttf') format('truetype');
+    src: url('fonts/Roboto-Medium.ttf') format('truetype');
 }
 @font-face {
     font-family: 'Roboto-bold';
-    src: url('Roboto/Roboto-Bold.ttf') format('truetype');
+    src: url('fonts/Roboto-Bold.ttf') format('truetype');
 }
 @font-face {
     font-family: 'Roboto-light';
-    src: url('Roboto/Roboto-Light.ttf') format('truetype');
+    src: url('fonts/Roboto-Light.ttf') format('truetype');
 }
 @font-face {
     font-family: 'Roboto-italic';
-    src: url('Roboto/Roboto-Italic.ttf') format('truetype');
+    src: url('fonts/Roboto-Italic.ttf') format('truetype');
 }
 @font-face {
     font-family: 'Roboto-bold-italic';
-    src: url('Roboto/Roboto-BoldItalic.ttf') format('truetype');
+    src: url('fonts/Roboto-BoldItalic.ttf') format('truetype');
 }
