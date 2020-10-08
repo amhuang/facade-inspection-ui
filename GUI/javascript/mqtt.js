@@ -108,27 +108,33 @@ var mqtt = function() {
         });
         DOM.upArrow.on({
             mousedown: arrowPress.bind(DOM.upArrow, "Up"),
-            mouseup: arrowRelease.bind(DOM.upArrow)
+            mouseup: arrowRelease.bind(DOM.upArrow),
+            mouseleave: arrowRelease.bind(DOM.upArrow)
         });
         DOM.downArrow.on({
             mousedown: arrowPress.bind(DOM.downArrow, "Down"),
-            mouseup: arrowRelease.bind(DOM.downArrow)
+            mouseup: arrowRelease.bind(DOM.downArrow),
+            mouseleave: arrowRelease.bind(DOM.downArrow)
         });
         DOM.upRightBox.on({
             mousedown: arrowPress.bind(DOM.upRightBox, "Up right"),
-            mouseup: arrowRelease.bind(DOM.upRightBox.children())
+            mouseup: arrowRelease.bind(DOM.upRightBox.children()),
+            mouseleave: arrowRelease.bind(DOM.upRightBox.children())
         });
         DOM.upLeftBox.on({
             mousedown: arrowPress.bind(DOM.upLeftBox.children(), "Up left"),
-            mouseup: arrowRelease.bind(DOM.upLeftBox.children())
+            mouseup: arrowRelease.bind(DOM.upLeftBox.children()),
+            mouseleave: arrowRelease.bind(DOM.upLeftBox.children())
         });
         DOM.downRightBox.on({
             mousedown: arrowPress.bind(DOM.downRightBox.children(), "Down right"),
-            mouseup: arrowRelease.bind(DOM.downRightBox.children())
+            mouseup: arrowRelease.bind(DOM.downRightBox.children()),
+            mouseleave: arrowRelease.bind(DOM.downRightBox.children())
         });
         DOM.downLeftBox.on({
             mousedown: arrowPress.bind(DOM.downLeftBox.children(), "Down left"),
-            mouseup: arrowRelease.bind(DOM.downLeftBox.children())
+            mouseup: arrowRelease.bind(DOM.downLeftBox.children()),
+            mouseleave: arrowRelease.bind(DOM.downLeftBox.children())
         });
         DOM.hoistMode.on('click', toggleHoistMode);
 
@@ -222,9 +228,12 @@ var mqtt = function() {
         client.subscribe('time/fromground');
 
         if ( reconnectAttempt > 0 ) {
-            DOM.errorMsg.append("<br><br>Reconnected. Hoist ready for operation.");
+            /*DOM.errorMsg.append("<br><br>Reconnected. Hoist ready for operation.");
             DOM.closeError.show();
-            DOM.replaceWithBackup.hide();
+            DOM.replaceWithBackup.hide();*/
+
+            DOM.popupError.hide();
+            notification('Hoist ready for operation.', 'Reconnected');
             reconnectAttempt = 0;
             console.log('reconnected');
         }
@@ -336,7 +345,7 @@ var mqtt = function() {
             currAltitude = msg * 3.281;
             msg = (currAltitude - initAltitude).toFixed(2);
             if (msg >= maxHeight) {
-                closeToNotif('You have reached the maximum operating height of ' + maxHeight + ' feet.')
+                notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
             }
         } else if (type == "temperature") {
             unit = "&degF";
@@ -500,6 +509,7 @@ var mqtt = function() {
         DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
 
+        DOM.confirmHeader.html('Are you sure?');
         DOM.confirmMsg.html('Click confirm to zero the angle. The hoist should be on the ground to maximize accuracy.');
 
         DOM.confirmYes.on('click', function() {
@@ -512,6 +522,7 @@ var mqtt = function() {
         DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
 
+        DOM.confirmHeader.html('Are you sure?');
         DOM.confirmMsg.html('Click confirm to zero the altitude. The hoist should be on the ground to maximize accuracy.');
 
         DOM.confirmYes.on('click', function() {
@@ -536,7 +547,7 @@ var mqtt = function() {
                 timeFromGnd -= 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
                 if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
-                    closeToNotif('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.')
+                    notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
                 }
             }, 1000);
         } else if (msg == 'Up left' || msg == 'Up right') {
@@ -587,12 +598,18 @@ var mqtt = function() {
         }
     }
 
-    function closeToNotif(message) {
+    function notification(message, header) {
         client.send(newMsg('Off', 'hoist'));
         //DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
+
+        if (DOM.confirmHeader.html() == null) {
+            DOM.confirmHeader.hide();
+        } else {
+            DOM.confirmHeader.html(header);
+        }
+
         DOM.confirmMsg.html(message);
-        DOM.confirmHeader.hide();
         DOM.confirmYes.addClass('center');
         DOM.confirmYes.children().html('Continue');
         DOM.confirmNo.hide();
