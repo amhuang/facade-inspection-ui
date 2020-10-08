@@ -62,7 +62,7 @@ def scale_accel():
 class ACC:
     def __init__(self, offset):
         self.offset = offset
-        
+
     def angle_raw(self):
         acceleration = scale_accel()
         x = acceleration[0]
@@ -76,7 +76,7 @@ class ACC:
         stop = start
         count = 0
         lst = np.empty(0)
-        while (stop - start < .2):            
+        while (stop - start < .2):
             lst = np.insert(lst, count, self.angle_raw())
             count += 1
             stop = time.time()

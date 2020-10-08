@@ -26,7 +26,7 @@ var mqtt = function() {
     var fromGndTimer;            // interval to keep track off timeFromGnd
     var recoverTimeFromGnd;     // interval that sends time from ground on disconnect
     // var cycleTimer;             // times active duty time
-    var maxHeight;
+    var maxHeight = 30;
 
     /* ----- INITIALIZING FUNCTIONS ----- */
 
@@ -71,6 +71,7 @@ var mqtt = function() {
         DOM.toggleLeveling = $('#toggle-leveling');
         DOM.timeFromGnd = $('#time-from-ground');
         DOM.resetIpAddr = $('#set-ip-addr');
+        DOM.maxHeightInput = $('#max-height');
         DOM.setMaxHeight = $('#set-max-height');
         DOM.setCycleTime = $('#set-cycle-time');
 
@@ -94,7 +95,7 @@ var mqtt = function() {
         if (upperIp != null) { $('#upperpi').val(upperIp); }
         if (lowerIp != null) { $('#lowerpi').val(lowerIp); }
         if (backupIp != null) { $('#backuppi').val(backupIp); }
-        if (maxHeight != null) { $('#max-height').val(maxHeight); }
+        if (maxHeight != null) { $('#max-height').val(maxHeight + " ft"); }
     }
 
     function bindEvents() {
@@ -155,6 +156,9 @@ var mqtt = function() {
         DOM.closeSettings.on('click', toggleSettings);
         DOM.replaceWithBackup.on('click', connectBackupPi);
         DOM.resetIpAddr.on('click', resetIpAddr);
+        DOM.maxHeightInput.on('click', function() {
+            DOM.maxHeightInput.val('');
+        });
         DOM.setMaxHeight.on('click', setMaxHeight);
     }
 
@@ -512,6 +516,7 @@ var mqtt = function() {
 
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
+            initAltitude = currAltitude;
         });
     }
 
@@ -584,7 +589,7 @@ var mqtt = function() {
 
     function closeToNotif(message) {
         client.send(newMsg('Off', 'hoist'));
-        DOM.popupSettings.hide();
+        //DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
         DOM.confirmMsg.html(message);
         DOM.confirmHeader.hide();
@@ -623,12 +628,13 @@ var mqtt = function() {
         DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
         DOM.popupConfirm.css({'z-index': '3'});
-        DOM.confirmMsg.html("Click confirm to set the maximum operating height to " + $('#max-height').val() + " feet.");
+        DOM.confirmMsg.html("Click confirm to set the maximum operating height to " + DOM.maxHeightInput.val() + " feet.");
 
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
             DOM.popupConfirm.css({'z-index': '1'});
-            maxHeight = $('#max-height').val();
+            maxHeight = parseInt(DOM.maxHeightInput.val());
+            DOM.maxHeightInput.val(maxHeight + " ft");
             sessionStorage.setItem("max-height", maxHeight);
         });
     }
