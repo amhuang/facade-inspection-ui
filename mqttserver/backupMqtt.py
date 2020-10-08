@@ -20,7 +20,7 @@ import subprocess
 import setInterval as thread
 import threading
 import hoistControl as HOIST
-from hoistTimer import Timer
+from timer import Timer
 import mpu6050
 
 ACC = mpu6050.ACC(offset=0)
@@ -59,7 +59,7 @@ def on_connect(client, userdata, flags, rc):
 
 def on_subscribe(client, userdata, mid, granted_qos):
     print("subscribed")
-     
+
 def on_message(client, userdata, message):
     global backup_listen, msg, topic
     msg = message.payload.decode("utf-8")
@@ -74,13 +74,13 @@ def on_message(client, userdata, message):
 def on_disconnect(client, userdata, rc):
     global broker
     print("I'm disconnected")
-    
+
     client.loop_stop()
 
     # Starts a new broker on backup when main loses power
     run_broker = subprocess.Popen(["sh", "mqttBroker.sh"])
     time.sleep(1)
-    
+
     backup_listen = True
     broker = backupBroker
 
@@ -88,7 +88,7 @@ def on_disconnect(client, userdata, rc):
     client.subscribe("hoist")
     client.subscribe("status")
     client.subscribe("time/fromground")
-    
+
     angle_thread = thread.setInterval(0.25, publish_angle)
     angle_thread.start()
     timefromground_thread = thread.setInterval(8, publish_timefromground)
@@ -154,7 +154,7 @@ def all_same(lst):
 
 def publish_timefromground():
     client.publish('time/fromground', str(HOIST.time_from_ground.curr))
-    
+
 
 try:
     while True:
@@ -236,4 +236,3 @@ finally:
     # opens relays broker keeps running but this file doesnt
     # and disconnect is ungraceful
     HOIST.stop()
-

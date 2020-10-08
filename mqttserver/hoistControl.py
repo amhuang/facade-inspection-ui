@@ -1,7 +1,7 @@
 import RPi.GPIO as GPIO
 import time
 import mpu6050
-from hoistTimer import Timer
+from timer import Timer
 import threading
 import setInterval
 
@@ -32,7 +32,7 @@ ACC = mpu6050.ACC(offset=0)
 def set_offset(off):
     ACC.offset = off
     print("hoist offset: ", ACC.offset)
-    
+
 def set_time(init_time):
     global time_from_ground
     time_from_ground = Timer()
@@ -63,7 +63,7 @@ def down_both():
     GPIO.output(DOWN_L, GPIO.HIGH)
     GPIO.output(DOWN_R, GPIO.HIGH)
     time_from_ground.start_countdown()
-    
+
 def up_left():
     GPIO.output(DOWN_L, GPIO.LOW)
     GPIO.output(DOWN_R, GPIO.LOW)
@@ -110,8 +110,7 @@ def level_up():
                 up_right()
                 print("left stopped: " , angle)
                 # No sleep here bc ACC.angle takes 0.1-0.2s to run
-            if angle < buffer:
-                up_both()
+            up_both()
 
         # Left side tilted down
         elif angle < -threshold:
@@ -119,8 +118,7 @@ def level_up():
                 angle = ACC.angle()
                 up_left()
                 print("right stopped: ", angle)
-            if angle > -buffer:
-                up_both()
+            up_both()
 
         else:
             up_both()
@@ -131,8 +129,8 @@ def level_up():
 def level_down():
     global max_time
     timer = Timer()
-    
-    try: 
+
+    try:
         angle = ACC.angle()
 
         # Right side tilted down
@@ -142,9 +140,7 @@ def level_down():
                 down_left()
                 print("right stopped: ", angle)
                 # No sleep here bc ACC.angle takes 0.1-0.2s to run
-            
-            if angle < buffer:
-                down_both()
+            down_both()
 
         # Left side tilted down
         elif angle < -threshold:
@@ -152,23 +148,21 @@ def level_down():
                 angle = ACC.angle()
                 down_right()
                 print("left stopped: ", angle)
-                
-            if angle > -buffer:
-                down_both()
+            down_both()
 
         else:
             down_both()
-            
+
     except:
         stop()
-        
+
 def make_level():
     timer = Timer()
     max_time = 3
-    
+
     try:
         angle = ACC.angle()
-   
+
         # Right side tilted down
         if angle > threshold:
             while (angle > buffer) and (timer.countup() < max_time):
@@ -184,6 +178,6 @@ def make_level():
                 down_right()
                 print("right moving: ", angle)
             stop()
-            
+
     except:
         stop()

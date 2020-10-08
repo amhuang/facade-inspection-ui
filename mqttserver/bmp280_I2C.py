@@ -1,7 +1,9 @@
-import time
 import board
 import busio
 import adafruit_bmp280
+import time
+from timer import Timer
+import numpy as np
 
 # create library object using our Bus SPI port
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -11,7 +13,13 @@ bmp_280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 bmp_280.sea_level_pressure = 1015.0
 
 def altitude():
-    return bmp_280.altitude
+    timer = Timer().start()
+    count = 0
+    lst = np.empty(0)
+    while (timer.countup() < .4):
+        lst = np.insert(lst, count, bmp_280.altitude)
+        count += 1
+    return np.mean(lst)
 
 def pressure():
     return bmp_280.pressure

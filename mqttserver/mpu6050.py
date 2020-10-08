@@ -4,7 +4,7 @@ Pos angle when side with INT/ADD (RIGHT hoist) is lower '''
 import smbus
 import math
 import time
-from statistics import mean
+import timer
 import numpy as np
 
 offset = 0
@@ -72,14 +72,12 @@ class ACC:
         return pitch(x,y,z)
 
     def angle(self):
-        start = time.time()
-        stop = start
+        timer = Timer().start()
         count = 0
         lst = np.empty(0)
-        while (stop - start < .2):
+        while (timer.countup() < .1):
             lst = np.insert(lst, count, self.angle_raw())
             count += 1
-            stop = time.time()
         return np.mean(lst) - self.offset
 '''
 hi = ACC(-1)

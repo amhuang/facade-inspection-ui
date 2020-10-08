@@ -7,7 +7,7 @@ import setInterval as thread
 import atexit
 import mpu6050
 import hoistControl as HOIST
-from hoistTimer import Timer
+from timer import Timer
 
 ''' MQTT Setup '''
 
