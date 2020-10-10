@@ -18,7 +18,6 @@ import time
 import paho.mqtt.client as paho
 import subprocess
 import setInterval as thread
-import threading
 import hoistControl as HOIST
 from timer import Timer
 import mpu6050
@@ -38,7 +37,7 @@ GPIO.setup(DOWN_L,GPIO.OUT)
 GPIO.setup(UP_R,GPIO.OUT)
 GPIO.setup(DOWN_R,GPIO.OUT)
 
-broker = "192.168.1.237"    # IP of MAIN broker Pi
+broker = "192.168.1.253"    # IP of MAIN broker Pi
 backupBroker = "192.168.1.212"
 #backupBroker = "192.168.1.113"
 port = 9001                 # Set in mosquitto.conf

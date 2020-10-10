@@ -4,17 +4,14 @@ import time
 import paho.mqtt.client as paho
 import subprocess
 import setInterval as thread
-import atexit
 import mpu6050
 import hoistControl as HOIST
 from timer import Timer
 
 ''' MQTT Setup '''
 
-broker = "192.168.1.235"    # IP of broker Pi
+broker = "192.168.1.253"    # IP of broker Pi
 port = 9001                 # Set in mosquitto.conf
-livestreams = subprocess.Popen(['sh', 'mjpg-streamer.sh'])
-time.sleep(1)
 runBroker = subprocess.Popen(['sh', 'mqttBroker.sh'])
 time.sleep(0.5)
 
