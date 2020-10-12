@@ -72,13 +72,15 @@ class ACC:
         return pitch(x,y,z)
 
     def angle(self):
-        timer = Timer().start()
+        t = timer.Timer()
+        t.start()
         count = 0
         lst = np.empty(0)
-        while (timer.countup() < .1):
+        while (t.countup() < .1):
             lst = np.insert(lst, count, self.angle_raw())
             count += 1
         return np.mean(lst) - self.offset
+
 '''
 hi = ACC(-1)
 
