@@ -4,29 +4,34 @@ MQTT Javascript Client
 
 var mqtt = function() {
 
-    /* ----- GLOBAL VARIABLESs ----- */
+    /* ----- MQTT-WIDE VARIABLES ----- */
 
     var DOM = {};
-
     var client;
     var minPress = 300;         // min ms to hold for key/mouse
     var firstPress = true;      // limit keypress to firing only once
-    var holdTimeout;            // delays hoist operation by minPress
     var indivHoistMode = false;
     var levelingEnabled = true;
-    var movingInterval;         // sends msgs while arrows held down at sendFreq
     var sendFreq = 1000;        // how often msg sent (hoist checks level)
+    var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
 
     var initAltitude = 0;       // the offset set by zeroAltitude
     var currAltitude = 0;
-
-    var connectedNoMsg;         // interval reconnect tried when no message received
-    var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
+    var maxHeight = 1000;
+    var maxHeightReached = false;
     var timeFromGnd = 0;        // sec from ground determined from fromGndTimers
-    var fromGndTimer;            // interval to keep track off timeFromGnd
-    var recoverTimeFromGnd;     // interval that sends time from ground on disconnect
-    // var cycleTimer;             // times active duty time
-    var maxHeight = 30;
+
+    // Timeouts
+    var holdTimeout;            // delays hoist operation by minPress
+
+    // Intervals
+    var movingInterval;         // sends msgs while arrows held down at sendFreq
+    var connectedNoMsg;         // interval reconnect tried when no message received
+    var fromGndTimer;           // interval to keep track off timeFromGnd
+    var recoverTimeFromGnd;     // interval that sends time from ground on disconnects
+    var cycleTimer;             // times active duty time
+    var seaLevelPressure;
+
 
     /* ----- INITIALIZING FUNCTIONS ----- */
 
@@ -83,6 +88,8 @@ var mqtt = function() {
         DOM.angleAnimation = $("#angle-animation");
         DOM.zeroAngle = $('#zero-angle');
         DOM.zeroAltitude = $('#zero-altitude');
+        DOM.seaLevelPressure = $('#sea-level-pressure');
+        DOM.setSeaLevelPressure = $('#set-sea-level-pressure');
     }
 
     function getSessionStorage() {
@@ -90,12 +97,21 @@ var mqtt = function() {
         var upperIp = sessionStorage.getItem("upper-ip");
         var lowerIp = sessionStorage.getItem("lower-ip");
         var backupIp = sessionStorage.getItem("backup-ip");
-        maxHeight = sessionStorage.getItem("max-height");
 
         if (upperIp != null) { $('#upperpi').val(upperIp); }
         if (lowerIp != null) { $('#lowerpi').val(lowerIp); }
         if (backupIp != null) { $('#backuppi').val(backupIp); }
-        if (maxHeight != null) { $('#max-height').val(maxHeight + " ft"); }
+        if (sessionStorage.getItem("max-height") != null) {
+            maxHeight = sessionStorage.getItem("max-height");
+            $('#max-height').val(maxHeight + " ft");
+        }
+        if (sessionStorage.getItem("sea-level-pressure") != null) {
+            seaLevelPressure = sessionStorage.getItem("sea-level-pressure");
+            $('#sea-level-pressure').val(seaLevelPressure + " inHg");
+        }
+        if (sessionStorage.getItem("init-altitude") != null) {
+            initAltitude = sessionStorage.getItem("init-altitude") ;
+        }
     }
 
     function bindEvents() {
@@ -166,6 +182,7 @@ var mqtt = function() {
             DOM.maxHeightInput.val('');
         });
         DOM.setMaxHeight.on('click', setMaxHeight);
+        DOM.setSeaLevelPressure.on('click', setSeaLevelPressure);
     }
 
 
@@ -200,7 +217,10 @@ var mqtt = function() {
         bindEvents();
 
         // Retrieves in case of page refresh (last time msg received from Pi)
-        timeFromGnd = sessionStorage.getItem('time-from-ground');
+
+        if (sessionStorage.getItem('time-from-ground') != null) {
+            timeFromGnd = sessionStorage.getItem('time-from-ground');
+        }
         displayTime(timeFromGnd, DOM.timeFromGnd);
 
         // Connection to broker but lack of msgs (client not running) = failure
@@ -212,8 +232,12 @@ var mqtt = function() {
         // Tries to send last stored timeFromGnd continuously in case of
         // disconnect so next Pi connected doesn't reset it to 0
         recoverTimeFromGnd = setInterval( function() {
-            client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
-            console.log('sending ', timeFromGnd.toString());
+            try {
+                client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
+                console.log('sending time ', timeFromGnd.toString());
+            } catch (AMQJS0011E) {
+                console.log('send time failed');
+            }
         }, 200);
     }
 
@@ -283,10 +307,14 @@ var mqtt = function() {
             DOM.closeError.hide();
             DOM.noLeveling.hide();
             reconnectAttempt++;
+        } else if (reconnectAttempt == 20) {
+            location.reload();
         }
         console.log('reconnecting');
         DOM.errorMsg.html("Hoist controls disconnected. Reconnect attempt: " + reconnectAttempt);
+
         reconnectAttempt++;
+        clearInterval(recoverTimeFromGnd);
         mqttConnect();
     }
 
@@ -344,14 +372,15 @@ var mqtt = function() {
             nullVal = -676.9
             currAltitude = msg * 3.281;
             msg = (currAltitude - initAltitude).toFixed(2);
-            if (msg >= maxHeight) {
+            if (msg >= maxHeight && !maxHeightReached) {
                 notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
+                maxHeightReached = true;
             }
         } else if (type == "temperature") {
             unit = "&degF";
             nullVal = -212.3;
         } else if (type == "pressure") {
-            unit = " hPa";
+            unit = " inHg";
             nullVal = 1100;
         }
         typeDisplay.html(msg + unit);
@@ -528,6 +557,7 @@ var mqtt = function() {
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
             initAltitude = currAltitude;
+            sessionStorage.setItem("init-altitude", initAltitude);
         });
     }
 
@@ -640,21 +670,47 @@ var mqtt = function() {
         });
     }
 
-    function setMaxHeight() {
-        //e.preventDefault();
+    function setMaxHeight(e) {
+        e.preventDefault();
         DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
         DOM.popupConfirm.css({'z-index': '3'});
-        DOM.confirmMsg.html("Click confirm to set the maximum operating height to " + DOM.maxHeightInput.val() + " feet.");
+
+        var tempVal = parseFloat(DOM.maxHeightInput.val());
+        DOM.confirmMsg.html("Click confirm to set the maximum operating height to " + tempVal + " feet.");
 
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
             DOM.popupConfirm.css({'z-index': '1'});
-            maxHeight = parseInt(DOM.maxHeightInput.val());
+            maxHeight = tempVal;
+            console.log(maxHeight);
             DOM.maxHeightInput.val(maxHeight + " ft");
             sessionStorage.setItem("max-height", maxHeight);
         });
     }
+
+    function setSeaLevelPressure(e) {
+        e.preventDefault();
+        DOM.popupSettings.hide();
+        DOM.popupConfirm.toggle();
+        DOM.popupConfirm.css({'z-index': '3'});
+
+        var tempVal = parseFloat(DOM.seaLevelPressure.val())
+        DOM.confirmMsg.html("Click confirm to set the local sea level pressure to " + tempVal + " inHg. This should be obtained from local weather reports");
+
+        DOM.confirmYes.on('click', function() {
+            DOM.popupConfirm.hide();
+            DOM.popupConfirm.css({'z-index': '1'});
+            seaLevelPressure = tempVal;
+            DOM.seaLevelPressure.val(seaLevelPressure + " inHg");
+            sessionStorage.setItem("sea-level-pressure", seaLevelPressure);
+
+            seaLevelPressure = (seaLevelPressure*3386.39).toString();
+            console.log(seaLevelPressure + " Pa");
+            client.send(newMsg(seaLevelPressure, 'altimeter/sealevelpressure'))
+        });
+    }
+
 
     /* ----- PUBLIC METHODS & EXPORT ----- */
 

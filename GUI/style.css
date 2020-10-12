@@ -75,6 +75,11 @@ p.light {
 	display: inherit;
 	color: white;
 }
+p.settings {
+	display: inherit;
+	font-size: 12pt;
+	color: white;
+}
 hr {
 	position: relative;
 	margin: 0 auto 24px auto;
@@ -553,6 +558,7 @@ button.set-val:hover {
 	margin-left: 28px;
 }
 .popup-option.center {
+	margin-left: 0;
 	left: 50%;
 	-webkit-transform: translateX(-50%);
 	transform: translateX(-50%);
@@ -617,9 +623,9 @@ button.set-val:hover {
 	display: grid;
 	width: 101%;
 	margin-left: 3px;
-	grid-template-columns: 30% 17.5% 28% 15% 5%;
+	grid-template-columns: 32% 16% 29% 18% 10%;
 	grid-template-rows: 30px 30px;
-	grid-gap: 5px;
+	grid-gap: 5px 0px;
 	justify-items: start;
 	align-items: center;
 }
