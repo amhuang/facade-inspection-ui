@@ -133,6 +133,8 @@ On your laptop, you'll need:
 
 ### Raspberry Pi Setup (accessed through VNC Viewer)
 
+The Pis' should all be running their necessary scripts on startup and all data on the GUI should show up without an issue.
+
 1. On the upper Pi:
     a. Run `mjpg-streamer.sh` (in terminal) to start the livestreams. You should be able to see the upper 3 livestreams on the GUI, provided that the GUI has the correct IP address of the Pi
     b. Run `mqttBroker.sh` (in terminal) to start the MQTT broker (andrea will eventually make this step a subprocess in upperMqtt.py)

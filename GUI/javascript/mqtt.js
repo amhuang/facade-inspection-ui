@@ -12,7 +12,7 @@ var mqtt = function() {
     var firstPress = true;      // limit keypress to firing only once
     var indivHoistMode = false;
     var levelingEnabled = true;
-    var sendFreq = 1000;        // how often msg sent (hoist checks level)
+    var sendFreq = 950;        // how often msg sent (hoist checks level)
     var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
 
     var initAltitude = 0;       // the offset set by zeroAltitude
