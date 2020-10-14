@@ -131,7 +131,7 @@ input.set-val.operation {
 }
 button.set-val {
 	-webkit-appearance: none;
-	background: url(images/confirm.png);
+	background: url(../images/confirm.png);
 	background-color: transparent;
 	background-size: 100%;
 	outline: none;
@@ -174,7 +174,7 @@ button.set-val:hover {
 }
 .show-editing {
 	-webkit-appearance: none;
-	background: url(images/sliders.png);
+	background: url(../images/sliders.png);
 	top: 20px;
 	right: 55px;
 	background-color: transparent;
@@ -192,7 +192,7 @@ button.set-val:hover {
 }
 .show-fullscreen {
 	-webkit-appearance: none;
-	background: url(images/expand.png);
+	background: url(../images/expand.png);
 	top: 20px;
 	right: 20px;
 	background-color: transparent;
@@ -491,7 +491,7 @@ button.set-val:hover {
 	z-index: 3;
 }
 .close-error {
-	background: url(images/x-black.png);
+	background: url(../images/x-black.png);
 	/* background-color: #CF6679; */
 	filter: brightness(90%);
 	-webkit-appearance: none;
@@ -516,7 +516,7 @@ button.set-val:hover {
 }
 
 .close-popup {
-	background: url(images/x-light.png);
+	background: url(../images/x-light.png);
 	/* background-color: #404040; */
 	-webkit-appearance: none;
 	position: absolute;
@@ -600,7 +600,7 @@ button.set-val:hover {
 }
 #show-settings {
 	-webkit-appearance: none;
-	background: url(images/settings.png);
+	background: url(../images/settings.png);
 	position: absolute;
 	top: 20px;
 	right: 20px;
