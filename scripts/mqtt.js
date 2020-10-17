@@ -4,7 +4,7 @@ MQTT Javascript Client
 
 var mqtt = function() {
 
-    /* ----- MQTT-WIDE VARIABLES ----- */
+    /* ----- FILE-WIDE VARIABLES ----- */
 
     var DOM = {};
     var client;
@@ -12,18 +12,22 @@ var mqtt = function() {
     var firstPress = true;      // limit keypress to firing only once
     var indivHoistMode = false;
     var levelingEnabled = true;
-    var sendFreq = 950;        // how often msg sent (hoist checks level)
+    var sendFreq = 900;         // how often msg sent (hoist checks level)
     var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
 
     var initAltitude = 0;       // the offset set by zeroAltitude
     var currAltitude = 0;
+    var seaLevelPressure;
     var maxHeight = 1000;
     var maxHeightReached = false;
-    var timeFromGnd = 0;        // sec from ground determined from hoistTimer
+    var timeFromGnd = 0;            // sec from ground determined from hoistTimer
     var operationTime = 0;
+    var accelDisconnected = false;
+    var backupBroker = false;       // UI connected to backup broker
 
     // Timeouts
     var holdTimeout;            // delays hoist operation by minPress
+    var reload;                 // delay before page reload
 
     // Intervals
     var movingInterval;         // sends msgs while arrows held down at sendFreq
@@ -31,8 +35,6 @@ var mqtt = function() {
     var hoistTimer;           // interval to keep track off timeFromGnd
     var recoverTimeFromGnd;     // interval that sends time from ground on disconnects
     var cycleTimer;             // times active duty time
-    var seaLevelPressure;
-
 
     /* ----- INITIALIZING FUNCTIONS ----- */
 
@@ -40,10 +42,13 @@ var mqtt = function() {
 
         getSessionStorage();
 
-        // for MQTT connection
+        // For MQTT connection
         DOM.document = $(document);
-        DOM.host = $('#upperpi').val();
         DOM.port = 9001;
+        if (backupBroker)
+            DOM.host = $('#backuppi').val();
+        else
+            DOM.host = $('#upperpi').val();
 
         // Hoist control buttons
         DOM.upArrow = $('#up-arrow');
@@ -95,14 +100,17 @@ var mqtt = function() {
     }
 
     function getSessionStorage() {
-        // retrieving stored session data if it exists (mostly settings stuff)
-        var upperIp = sessionStorage.getItem("upper-ip");
-        var lowerIp = sessionStorage.getItem("lower-ip");
-        var backupIp = sessionStorage.getItem("backup-ip");
+        // retrieves stored session data for use in cache() if it exists
 
-        if (upperIp != null) { $('#upperpi').val(upperIp); }
-        if (lowerIp != null) { $('#lowerpi').val(lowerIp); }
-        if (backupIp != null) { $('#backuppi').val(backupIp); }
+        if (sessionStorage.getItem("upper-ip") != null)
+            $('#upperpi').val(sessionStorage.getItem("upper-ip"));
+        if (sessionStorage.getItem("lower-ip") != null)
+            $('#lowerpi').val(sessionStorage.getItem("lower-ip"));
+        if (sessionStorage.getItem("backup-ip") != null)
+            $('#backuppi').val(sessionStorage.getItem("backup-ip"));
+        if (sessionStorage.getItem("backup-broker") != null)
+            backupBroker = sessionStorage.getItem("backup-broker");
+
         if (sessionStorage.getItem("max-height") != null) {
             maxHeight = sessionStorage.getItem("max-height");
             $('#max-height').val(maxHeight + " ft");
@@ -166,8 +174,8 @@ var mqtt = function() {
 
         // Error popup and options
         DOM.closeError.on('click', closeError);
-        DOM.noLeveling.on('click', accelerometerError.bind(null, 'Ignore angle'));
-        DOM.switchBackup.on('click', accelerometerError.bind(null, 'Switch to backup'));
+        DOM.noLeveling.on('click', closeError.bind(null, "Disable leveling"));
+        DOM.switchBackup.on('click', closeError.bind(null, "Switch to backup"));
     }
 
     function bindSettings() {
@@ -191,7 +199,6 @@ var mqtt = function() {
     /* ----- MQTT CALLBACK & HELPER FUNCTIONS ----- */
 
     function mqttConnect() {
-
         var clientId = "gui"+new Date().getTime();
         client = new Paho.MQTT.Client(DOM.host, DOM.port, clientId);
         client.onConnectionLost = onConnectionLost;
@@ -209,40 +216,63 @@ var mqtt = function() {
     }
 
     function onConnect() {
+
         client.subscribe("status");
         client.subscribe("accelerometer/angle");
+        client.subscribe("accelerometer/status");
         client.subscribe("altimeter/altitude");
         client.subscribe("altimeter/pressure");
         client.subscribe("altimeter/temperature");
 
-        // Can only send msgs in onConnect, so event listeners here
         bindEvents();
 
         // Retrieves in case of page refresh (last time msg received from Pi)
+        if (sessionStorage.getItem("accel-disconnected") != null)
+            accelDisconnected = sessionStorage.getItem("accel-disconnected");
+        if (sessionStorage.getItem('time-from-ground') != null)
+            timeFromGnd = Number(sessionStorage.getItem('time-from-ground'));
+        if (sessionStorage.getItem('operation-time') != null)
+            operationTime = Number(sessionStorage.getItem('operation-time'));
 
-        if (sessionStorage.getItem('time-from-ground') != null) {
-            timeFromGnd = sessionStorage.getItem('time-from-ground');
-            operationTime = sessionStorage.getItem('operation-time');
-        }
         displayTime(timeFromGnd, DOM.timeFromGnd);
-        displayTime(operationTime, DOM.operationTime)
+        displayTime(operationTime, DOM.operationTime);
 
-        // Connection to broker but lack of msgs (client not running) = failure
-        connectedNoMsg = setTimeout(function() {
-            onFailure();
-            console.log('no message received');
-        }, 4000);
+        // Setup for disconnected accelerometer. UI not expecting messages
+        if (accelDisconnected) {
+            levelingEnabled = false;
+            DOM.toggleLeveling.children().html('Leveling Unavailable');
+            DOM.toggleLeveling.off();
+            DOM.makeLevel.children().html('Leveling Unavailable');
+            DOM.makeLevel.off()
+            DOM.hoistMode.children().html('Not Leveling');
+            DOM.angle.html("Disconnected");
+            DOM.angleAnimation.css({
+                '-webkit-transform': 'rotate(0deg)',
+                'transform': 'rotate(0deg)',
+                'background': 'grey'
+            });
+        }
 
-        // Tries to send last stored timeFromGnd continuously in case of
-        // disconnect so next Pi connected doesn't reset it to 0
-        recoverTimeFromGnd = setInterval( function() {
-            try {
-                client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
-                console.log('sending time ', timeFromGnd.toString());
-            } catch (AMQJS0011E) {
-                console.log('send time failed');
-            }
-        }, 200);
+        // UI expecting messages but isn't getting them
+        else if (!accelDisconnected) {
+            // Connection to broker and should be receiving angle but it isn't
+            // (client not running)
+            connectedNoMsg = setTimeout(function() {
+                onFailure();
+                console.log('no message received');
+            }, 4000);
+
+            // Tries to send last stored timeFromGnd continuously in case of
+            // disconnect so next Pi connected doesn't reset it to 0
+            recoverTimeFromGnd = setInterval( function() {
+                try {
+                    client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
+                    console.log('sending time ', timeFromGnd.toString());
+                } catch (AMQJS0011E) {
+                    console.log('send time failed');
+                }
+            }, 200);
+        }
     }
 
     function onMessageArrived(message)  {
@@ -270,7 +300,17 @@ var mqtt = function() {
             if (msg == "Upper Pi client disconnected") {
                 console.log(msg);
                 client.unsubscribe('time/fromground');
-                reconnect();
+            }
+            else if (msg == "Backup Pi client connected") {
+                console.log(msg);
+            }
+        } else if (topic == "accelerometer/status") {
+            if (msg == "Disconnected") {
+                accelerometerError();
+                console.log('accelerometer disconnect');
+            } else if (msg == "Backup disconnected") {
+                accelerometerError(backup=true);
+                console.log('accelerometer disconnect');
             }
         } else if (topic == "accelerometer/angle") {
             renderAccelerometerData(msg);
@@ -296,6 +336,7 @@ var mqtt = function() {
     function onConnectionLost(responseObject) {
         console.log('Connection lost');
         console.log(responseObject);
+
         if (responseObject.errorCode == 5){
             location.reload();
         }
@@ -305,21 +346,34 @@ var mqtt = function() {
     }
 
     function reconnect() {
+
         if (reconnectAttempt == 0) {
             DOM.popupError.show();
-            DOM.replaceWithBackup.show();
             DOM.closeError.hide();
             DOM.noLeveling.hide();
+            DOM.switchBackup.hide();
+            if (!backupBroker) {
+                DOM.replaceWithBackup.show();
+            }
             reconnectAttempt++;
         } else if (reconnectAttempt == 20) {
-            location.reload();
+            reload = setTimeout(function() {
+                location.reload();
+            }, 3000);
         }
+
+        clearTimeout(reload);
+        clearInterval(recoverTimeFromGnd);
         console.log('reconnecting');
+
+
         DOM.errorMsg.html("Hoist controls disconnected. Reconnect attempt: " + reconnectAttempt);
 
-        reconnectAttempt++;
-        clearInterval(recoverTimeFromGnd);
-        mqttConnect();
+
+        setTimeout(function() {
+            reconnectAttempt++;
+            mqttConnect();
+        }, 3000);
     }
 
     function newMsg(message, topic) {
@@ -329,37 +383,57 @@ var mqtt = function() {
     }
 
     function connectBackupPi() {
-        /* Sets mqtt-ip in HTML to IP address of backup Pi */
-        DOM.host = $('#backuppi').val();
-        DOM.errorMsg.append("<br><br>Connecting to backup...");
-        mqttConnect();
+        sessionStorage.setItem("accel-disconnected", false);
+
+        try {
+            client.send(newMsg("Switch to backup", 'hoist'));
+        }
+        catch {
+            backupBroker = true;
+            sessionStorage.setItem('backup-broker', true);
+
+            DOM.host = $('#backuppi').val();
+            DOM.errorMsg.append("<br><br>Connecting to backup...");
+            DOM.replaceWithBackup.hide();
+            DOM.noLeveling.hide();
+            DOM.switchBackup.hide();
+
+            mqttConnect();
+        }
+
     }
 
 
     /* ----- SENSOR DATA HANDLING ----- */
 
+    function accelerometerError(backup=false) {
+        DOM.popupError.show();
+        DOM.closeError.show();
+        DOM.replaceWithBackup.hide();
+        DOM.noLeveling.show();
+
+        if (backup) {
+            DOM.noLeveling.addClass("center");
+            DOM.switchBackup.hide();
+        } else {
+            DOM.switchBackup.show();
+            DOM.noLeveling.removeClass("center");
+        }
+
+        DOM.errorMsg.html("The accelerometer is disconnected. If you continue, there will be no leveling.");
+
+        DOM.angle.html("Disconnected");
+        DOM.angleAnimation.css({
+            '-webkit-transform': 'rotate(0deg)',
+            'transform': 'rotate(0deg)',
+            'background': 'grey'
+        });
+    }
     // Processes accelerometer data from MQTT messages and displays it
     function renderAccelerometerData(msg) {
-        if ( msg == "Disconnected" ) {
-            console.log(msg);
-            DOM.errorMsg.html("The accelerometer is disconnected. If you continue, there will be no leveling.");
-            DOM.popupError.show();
-            DOM.closeError.show();
-            DOM.noLeveling.show();
-            DOM.switchBackup.show();
-            DOM.replaceWithBackup.hide();
-
-            DOM.angle.html("Disconnected");
-            DOM.angleAnimation.css({
-                '-webkit-transform': 'rotate(0deg)',
-                'transform': 'rotate(0deg)',
-                'background': 'grey'
-            });
-        } else {
-            msg = Number(msg).toFixed(1);
-            DOM.angle.html(msg + "&deg");
-            rotateAnimation(msg);
-        }
+        msg = Number(msg).toFixed(1);
+        DOM.angle.html(msg + "&deg");
+        rotateAnimation(msg);
     }
 
     // Processes altimeter data from MQTT messages and displays it
@@ -523,19 +597,27 @@ var mqtt = function() {
         }
     }
 
-    function closeError() {
-        DOM.popupError.hide();
-        DOM.noLeveling.hide();
-        DOM.switchBackup.hide();
-        DOM.replaceWithBackup.show();
-        DOM.errorMsg.html("");
-    }
+    function closeError(action = "close") {
 
-    function accelerometerError(action) {
         DOM.popupError.hide();
         DOM.noLeveling.hide();
         DOM.switchBackup.hide();
-        client.send(newMsg(action, 'accelerometer/status'));
+        DOM.errorMsg.html("");
+
+        if (action == "close") {
+            DOM.replaceWithBackup.show();
+        } else if (action == "Disable leveling") {
+            client.send(newMsg(action, 'hoist'));
+            DOM.hoistMode.children().html('Not Leveling');
+            DOM.toggleLeveling.hide();
+            DOM.makeLevel.hide();
+            levelingEnabled = false;
+            sessionStorage.setItem("accel-disconnected", true);
+        } else if (action == "Switch to backup") {
+            client.send(newMsg(action, 'hoist'));
+            accelDisconnected = false;
+            sessionStorage.setItem("accel-disconnected", true);
+        }
     }
 
     function zeroAngle() {
@@ -583,8 +665,7 @@ var mqtt = function() {
                 timeFromGnd -= 1;
                 operationTime += 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-
+                displayTime(operationTime, DOM.operationTime)
                 if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
                     notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
                 }
@@ -606,6 +687,7 @@ var mqtt = function() {
         } else if (msg = 'Off') {
             clearInterval(hoistTimer);
         }
+        console.log(timeFromGnd);
         sessionStorage.setItem("operation-time", operationTime);
     }
 
