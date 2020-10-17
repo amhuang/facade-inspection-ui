@@ -19,7 +19,8 @@ var mqtt = function() {
     var currAltitude = 0;
     var maxHeight = 1000;
     var maxHeightReached = false;
-    var timeFromGnd = 0;        // sec from ground determined from fromGndTimers
+    var timeFromGnd = 0;        // sec from ground determined from hoistTimer
+    var operationTime = 0;
 
     // Timeouts
     var holdTimeout;            // delays hoist operation by minPress
@@ -27,7 +28,7 @@ var mqtt = function() {
     // Intervals
     var movingInterval;         // sends msgs while arrows held down at sendFreq
     var connectedNoMsg;         // interval reconnect tried when no message received
-    var fromGndTimer;           // interval to keep track off timeFromGnd
+    var hoistTimer;           // interval to keep track off timeFromGnd
     var recoverTimeFromGnd;     // interval that sends time from ground on disconnects
     var cycleTimer;             // times active duty time
     var seaLevelPressure;
@@ -75,6 +76,7 @@ var mqtt = function() {
         DOM.makeLevel = $('#make-level');
         DOM.toggleLeveling = $('#toggle-leveling');
         DOM.timeFromGnd = $('#time-from-ground');
+        DOM.operationTime = $('#operation-time');
         DOM.resetIpAddr = $('#set-ip-addr');
         DOM.maxHeightInput = $('#max-height');
         DOM.setMaxHeight = $('#set-max-height');
@@ -220,8 +222,10 @@ var mqtt = function() {
 
         if (sessionStorage.getItem('time-from-ground') != null) {
             timeFromGnd = sessionStorage.getItem('time-from-ground');
+            operationTime = sessionStorage.getItem('operation-time');
         }
         displayTime(timeFromGnd, DOM.timeFromGnd);
+        displayTime(operationTime, DOM.operationTime)
 
         // Connection to broker but lack of msgs (client not running) = failure
         connectedNoMsg = setTimeout(function() {
@@ -568,31 +572,41 @@ var mqtt = function() {
 
     function timer(msg) {
         if (msg == 'Up') {
-            fromGndTimer = setInterval(function() {
+            hoistTimer = setInterval(function() {
                 timeFromGnd += 1;
+                operationTime += 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
             }, 1000);
         } else if (msg == 'Down') {
-            fromGndTimer = setInterval(function() {
+            hoistTimer = setInterval(function() {
                 timeFromGnd -= 1;
+                operationTime += 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+
                 if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
                     notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
                 }
             }, 1000);
         } else if (msg == 'Up left' || msg == 'Up right') {
-            fromGndTimer = setInterval(function() {
+            hoistTimer = setInterval(function() {
                 timeFromGnd += 0.5;
+                operationTime += 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
             }, 1000);
         } else if (msg == 'Down left' || msg == 'Down right') {
-            fromGndTimer = setInterval(function() {
+            hoistTimer = setInterval(function() {
                 timeFromGnd -= 0.5;
+                operationTime += 1;
                 displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
             }, 1000);
         } else if (msg = 'Off') {
-            clearInterval(fromGndTimer);
+            clearInterval(hoistTimer);
         }
+        sessionStorage.setItem("operation-time", operationTime);
     }
 
     function displayTime(time, text) {
