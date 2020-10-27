@@ -4,7 +4,7 @@ MQTT Javascript Client
 
 var mqtt = function() {
 
-    /* ----- FILE-WIDE VARIABLES ----- */
+    /* ----- MODULE-WIDE VARIABLES ----- */
 
     var DOM = {};
     var client;
@@ -104,10 +104,13 @@ var mqtt = function() {
 
         if (sessionStorage.getItem("upper-ip") != null)
             $('#upperpi').val(sessionStorage.getItem("upper-ip"));
+
         if (sessionStorage.getItem("lower-ip") != null)
             $('#lowerpi').val(sessionStorage.getItem("lower-ip"));
+
         if (sessionStorage.getItem("backup-ip") != null)
             $('#backuppi').val(sessionStorage.getItem("backup-ip"));
+
         if (sessionStorage.getItem("backup-broker") != null)
             backupBroker = sessionStorage.getItem("backup-broker");
 
@@ -165,7 +168,9 @@ var mqtt = function() {
         DOM.hoistMode.on('click', toggleHoistMode);
 
         // Settings and options
-        DOM.makeLevel.on('click', makeLevel);
+        DOM.makeLevel.on('click', function () {
+            client.send(newMsg('Make level', 'hoist'));
+        });
         DOM.toggleLeveling.on('click', toggleLeveling);
 
         // Zeroing data
@@ -181,18 +186,18 @@ var mqtt = function() {
     function bindSettings() {
         /* Binds event listeners in settings which don't rely on sending MQTT
         messages so they're accessible even when the GUI isn't connected */
-        DOM.confirmNo.on('click', function() {
-            DOM.popupConfirm.hide()
-        });
         DOM.showSettings.on('click', toggleSettings);
         DOM.closeSettings.on('click', toggleSettings);
         DOM.replaceWithBackup.on('click', connectBackupPi);
         DOM.resetIpAddr.on('click', resetIpAddr);
+        DOM.setSeaLevelPressure.on('click', setSeaLevelPressure);
+        DOM.setMaxHeight.on('click', setMaxHeight);
         DOM.maxHeightInput.on('click', function() {
             DOM.maxHeightInput.val('');
         });
-        DOM.setMaxHeight.on('click', setMaxHeight);
-        DOM.setSeaLevelPressure.on('click', setSeaLevelPressure);
+        DOM.confirmNo.on('click', function() {
+            DOM.popupConfirm.hide()
+        });
     }
 
 
@@ -211,6 +216,7 @@ var mqtt = function() {
             keepAliveInterval: 5,
             willMessage: newMsg('Off', 'hoist')
         };
+
         console.log('Connecting to: ' + DOM.host + ' on port: ' + DOM.port);
         client.connect(options);
     }
@@ -240,10 +246,8 @@ var mqtt = function() {
         // Setup for disconnected accelerometer. UI not expecting messages
         if (accelDisconnected) {
             levelingEnabled = false;
-            DOM.toggleLeveling.children().html('Leveling Unavailable');
-            DOM.toggleLeveling.off();
-            DOM.makeLevel.children().html('Leveling Unavailable');
-            DOM.makeLevel.off()
+            DOM.toggleLeveling.hide();
+            DOM.makeLevel.hide();
             DOM.hoistMode.children().html('Not Leveling');
             DOM.angle.html("Disconnected");
             DOM.angleAnimation.css({
@@ -255,6 +259,7 @@ var mqtt = function() {
 
         // UI expecting messages but isn't getting them
         else if (!accelDisconnected) {
+
             // Connection to broker and should be receiving angle but it isn't
             // (client not running)
             connectedNoMsg = setTimeout(function() {
@@ -268,7 +273,7 @@ var mqtt = function() {
                 try {
                     client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
                     console.log('sending time ', timeFromGnd.toString());
-                } catch (AMQJS0011E) {
+                } catch {
                     console.log('send time failed');
                 }
             }, 200);
@@ -286,10 +291,6 @@ var mqtt = function() {
         client.subscribe('time/fromground');
 
         if ( reconnectAttempt > 0 ) {
-            /*DOM.errorMsg.append("<br><br>Reconnected. Hoist ready for operation.");
-            DOM.closeError.show();
-            DOM.replaceWithBackup.hide();*/
-
             DOM.popupError.hide();
             notification('Hoist ready for operation.', 'Reconnected');
             reconnectAttempt = 0;
@@ -300,8 +301,7 @@ var mqtt = function() {
             if (msg == "Upper Pi client disconnected") {
                 console.log(msg);
                 client.unsubscribe('time/fromground');
-            }
-            else if (msg == "Backup Pi client connected") {
+            } else if (msg == "Backup Pi client connected") {
                 console.log(msg);
             }
         } else if (topic == "accelerometer/status") {
@@ -346,7 +346,6 @@ var mqtt = function() {
     }
 
     function reconnect() {
-
         if (reconnectAttempt == 0) {
             DOM.popupError.show();
             DOM.closeError.hide();
@@ -356,7 +355,8 @@ var mqtt = function() {
                 DOM.replaceWithBackup.show();
             }
             reconnectAttempt++;
-        } else if (reconnectAttempt == 20) {
+        } else if (reconnectAttempt >= 20) {
+            reconnectAttempt = 0;
             reload = setTimeout(function() {
                 location.reload();
             }, 3000);
@@ -365,10 +365,7 @@ var mqtt = function() {
         clearTimeout(reload);
         clearInterval(recoverTimeFromGnd);
         console.log('reconnecting');
-
-
         DOM.errorMsg.html("Hoist controls disconnected. Reconnect attempt: " + reconnectAttempt);
-
 
         setTimeout(function() {
             reconnectAttempt++;
@@ -387,24 +384,21 @@ var mqtt = function() {
 
         try {
             client.send(newMsg("Switch to backup", 'hoist'));
-        }
-        catch {
+        } catch {
             backupBroker = true;
             sessionStorage.setItem('backup-broker', true);
-
             DOM.host = $('#backuppi').val();
             DOM.errorMsg.append("<br><br>Connecting to backup...");
             DOM.replaceWithBackup.hide();
-            DOM.noLeveling.hide();
-            DOM.switchBackup.hide();
-
+            //DOM.noLeveling.hide();
+            //DOM.switchBackup.hide();
             mqttConnect();
         }
 
     }
 
 
-    /* ----- SENSOR DATA HANDLING ----- */
+    /* ----- DATA HANDLING & ANIMATIONS ----- */
 
     function accelerometerError(backup=false) {
         DOM.popupError.show();
@@ -416,12 +410,11 @@ var mqtt = function() {
             DOM.noLeveling.addClass("center");
             DOM.switchBackup.hide();
         } else {
-            DOM.switchBackup.show();
             DOM.noLeveling.removeClass("center");
+            DOM.switchBackup.show();
         }
 
         DOM.errorMsg.html("The accelerometer is disconnected. If you continue, there will be no leveling.");
-
         DOM.angle.html("Disconnected");
         DOM.angleAnimation.css({
             '-webkit-transform': 'rotate(0deg)',
@@ -429,6 +422,7 @@ var mqtt = function() {
             'background': 'grey'
         });
     }
+
     // Processes accelerometer data from MQTT messages and displays it
     function renderAccelerometerData(msg) {
         msg = Number(msg).toFixed(1);
@@ -438,6 +432,7 @@ var mqtt = function() {
 
     // Processes altimeter data from MQTT messages and displays it
     function renderAltimeterData(typeDisplay, msg) {
+
         var unit, nullVal;
         var type = typeDisplay.attr("id");
         msg = Number(msg);
@@ -461,14 +456,17 @@ var mqtt = function() {
             unit = " inHg";
             nullVal = 1100;
         }
+
         typeDisplay.html(msg + unit);
     }
 
     // Rotates the bar animation
     function rotateAnimation(degrees) {
+
         if (degrees > 25 || degrees < -25) {
             DOM.angleAnimation.css({'background': '#ff8a65'});
-        } else if (degrees > 2 || degrees < -2) {
+        }
+        else if (degrees > 2 || degrees < -2) {
             DOM.angleAnimation.css({
                 '-webkit-transform': 'rotate('+degrees+'deg)',
                 'transform': 'rotate('+degrees+'deg)',
@@ -483,6 +481,83 @@ var mqtt = function() {
         }
     }
 
+    function timer(msg) {
+        if (msg == 'Up') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd += 1;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg == 'Down') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd -= 1;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime)
+                if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
+                    notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
+                }
+            }, 1000);
+        } else if (msg == 'Up left' || msg == 'Up right') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd += 0.5;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg == 'Down left' || msg == 'Down right') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd -= 0.5;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg = 'Off') {
+            clearInterval(hoistTimer);
+        }
+        sessionStorage.setItem("operation-time", operationTime);
+    }
+
+    function displayTime(time, text) {
+        // Takes time as seconds
+        var min = Math.floor(Math.abs(time)/60);
+        var sec = Math.floor(Math.abs(time)%60);
+        if (sec < 10) {
+            sec = '0' + sec;
+        }
+        if (time < 0) {
+            text.html('-' + min + ':' + sec);
+        }
+        else {
+            text.html(min + ':' + sec);
+        }
+    }
+
+    function notification(message, header) {
+        client.send(newMsg('Off', 'hoist'));
+        DOM.popupConfirm.toggle();
+
+        if (DOM.confirmHeader.html() == null) {
+            DOM.confirmHeader.hide();
+        } else {
+            DOM.confirmHeader.html(header);
+        }
+
+        DOM.confirmMsg.html(message);
+        DOM.confirmYes.addClass('center');
+        DOM.confirmYes.children().html('Continue');
+        DOM.confirmNo.hide();
+
+        DOM.confirmYes.on('click', function() {
+            DOM.popupConfirm.hide();
+            DOM.confirmHeader.show();
+            DOM.confirmYes.removeClass('center');
+            DOM.confirmYes.children().html('Confirm');
+            DOM.confirmNo.show();
+        });
+    }
+
 
     /* ----- EVENT HANDLERS  ----- */
 
@@ -494,30 +569,23 @@ var mqtt = function() {
                 // timeout forces key to be held for minPress to run
                 holdTimeout = setTimeout( function() {
                     DOM.upArrow.addClass('active');
+                    // starts timer counting up
+                    timer('Up');
                     // sends initial message
                     client.send(newMsg('Up', 'hoist'));
-                    console.log("Up");
-
                     // sends subsequent messages in intervals of sendFreq ms
                     movingInterval = setInterval( function() {
                         client.send(newMsg('Up', 'hoist'));
-                        console.log("Up");
                     }, sendFreq);
-
-                    // starts timer counting up
-                    timer('Up');
                 }, minPress);
-            }
-            else if (event.key == "ArrowDown") {
+            } else if (event.key == "ArrowDown") {
                 holdTimeout = setTimeout( function() {
                     DOM.downArrow.addClass('active');
+                    timer('Down');
                     client.send(newMsg('Down', 'hoist'));
-                    console.log("Down");
                     movingInterval = setInterval( function() {
                         client.send(newMsg('Down', 'hoist'));
-                        console.log("Down");
                     }, sendFreq);
-                    timer('Down');
                 }, minPress);
             }
 
@@ -546,16 +614,15 @@ var mqtt = function() {
             holdTimeout = setTimeout( function() {
                 // sends initial message
                 client.send(newMsg(message, 'hoist'));
-
+                // starts timer counting in whichever direction message sets
+                timer(message);
                 // sends subsequent messages in intervals of sendFreq ms
                 movingInterval = setInterval( function() {
                     client.send(newMsg(message, 'hoist'));
                     console.log(message);
                 }, sendFreq);
-
-                // starts timer counting in whichever direction message sets
-                timer(message);
             }, minPress);
+
             $(this).delay(minPress).addClass('active');
         }
     }
@@ -566,11 +633,11 @@ var mqtt = function() {
         clearInterval(movingInterval);
         timer('Off');
         client.send(newMsg('Off', 'hoist'));
-        console.log('Off');
         $(this).removeClass('active');
     }
 
     function toggleHoistMode() {
+
         client.send(newMsg('Off', 'hoist'));
 
         DOM.upArrow.removeClass('active');
@@ -582,29 +649,26 @@ var mqtt = function() {
         DOM.downLeftBox.toggle();
         DOM.downRightBox.toggle();
 
-
         if (!indivHoistMode) {
             indivHoistMode = true;
             DOM.hoistMode.children().html('Individual');
-        }
-        else if (levelingEnabled) {
+        } else if (levelingEnabled) {
             indivHoistMode = false;
             DOM.hoistMode.children().html('Leveling');
-        }
-        else {
+        } else {
             indivHoistMode = false;
             DOM.hoistMode.children().html('No Leveling');
         }
     }
 
-    function closeError(action = "close") {
+    function closeError(action = "default") {
 
         DOM.popupError.hide();
         DOM.noLeveling.hide();
         DOM.switchBackup.hide();
         DOM.errorMsg.html("");
 
-        if (action == "close") {
+        if (action == "default") {
             DOM.replaceWithBackup.show();
         } else if (action == "Disable leveling") {
             client.send(newMsg(action, 'hoist'));
@@ -652,63 +716,6 @@ var mqtt = function() {
         DOM.popupConfirm.hide();
     }
 
-    function timer(msg) {
-        if (msg == 'Up') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd += 1;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg == 'Down') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd -= 1;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime)
-                if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
-                    notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
-                }
-            }, 1000);
-        } else if (msg == 'Up left' || msg == 'Up right') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd += 0.5;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg == 'Down left' || msg == 'Down right') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd -= 0.5;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg = 'Off') {
-            clearInterval(hoistTimer);
-        }
-        console.log(timeFromGnd);
-        sessionStorage.setItem("operation-time", operationTime);
-    }
-
-    function displayTime(time, text) {
-        // Takes time as seconds
-        var min = Math.floor(Math.abs(time)/60);
-        var sec = Math.floor(Math.abs(time)%60);
-        if (sec < 10) {
-            sec = '0' + sec;
-        }
-        if (time < 0) {
-            text.html('-' + min + ':' + sec);
-        } else {
-            text.html(min + ':' + sec);
-        }
-    }
-
-    function makeLevel() {
-        client.send(newMsg('Make level', 'hoist'));
-    }
-
     function toggleLeveling() {
         client.send(newMsg('Toggle leveling', 'hoist'));
 
@@ -722,31 +729,6 @@ var mqtt = function() {
             DOM.hoistMode.children().html('Leveling');
             levelingEnabled = true;
         }
-    }
-
-    function notification(message, header) {
-        client.send(newMsg('Off', 'hoist'));
-        //DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
-
-        if (DOM.confirmHeader.html() == null) {
-            DOM.confirmHeader.hide();
-        } else {
-            DOM.confirmHeader.html(header);
-        }
-
-        DOM.confirmMsg.html(message);
-        DOM.confirmYes.addClass('center');
-        DOM.confirmYes.children().html('Continue');
-        DOM.confirmNo.hide();
-
-        DOM.confirmYes.on('click', function() {
-            DOM.popupConfirm.hide();
-            DOM.confirmHeader.show();
-            DOM.confirmYes.removeClass('center');
-            DOM.confirmYes.children().html('Confirm');
-            DOM.confirmNo.show();
-        });
     }
 
     function resetIpAddr(e) {
@@ -779,7 +761,6 @@ var mqtt = function() {
             DOM.popupConfirm.hide();
             DOM.popupConfirm.css({'z-index': '1'});
             maxHeight = tempVal;
-            console.log(maxHeight);
             DOM.maxHeightInput.val(maxHeight + " ft");
             sessionStorage.setItem("max-height", maxHeight);
         });
@@ -802,7 +783,6 @@ var mqtt = function() {
             sessionStorage.setItem("sea-level-pressure", seaLevelPressure);
 
             seaLevelPressure = (seaLevelPressure*3386.39).toString();
-            console.log(seaLevelPressure + " Pa");
             client.send(newMsg(seaLevelPressure, 'altimeter/sealevelpressure'))
         });
     }

@@ -218,9 +218,7 @@ button.set-val:hover {
 	position: absolute;
 	bottom: 10px;
 	width: 100%;
-	visibility: hidden;
-	opacity: 0;
-    transition: visibility .2s, opacity .2s;
+	display: none;
 }
 .slider-box {
 	position: relative;
@@ -245,7 +243,7 @@ button.set-val:hover {
     background: white;
     outline: none;
 	border: 0;
-    opacity: .8;
+    opacity: .6;
     -webkit-transition: .2s;
     transition: opacity .2s;
 }
@@ -591,11 +589,11 @@ button.set-val:hover {
 	background-color: #75a478;
 }
 #make-level {
-	margin-top: 0px;
+	margin-top: 14px;
 	background-color: #404040;
 }
 #toggle-leveling {
-	margin-top: 0px;
+	margin-top: 14px;
 	background-color: #404040;
 }
 #show-settings {
