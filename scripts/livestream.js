@@ -16,7 +16,7 @@ var livestream = function() {
         DOM.upperIp = "http://" + $('#upperpi').val() + ":8080/?action=stream_";
         DOM.lowerIp = "http://" + $('#lowerpi').val() + ":8080/?action=stream_";
 
-        // Img
+        // Imgs
         DOM.vid0 = $('#livestream-0'); // video occupying fullscreen
         DOM.vid1 = $('#livestream-1'); // smaller 1/6 videos
         DOM.vid2 = $('#livestream-2');

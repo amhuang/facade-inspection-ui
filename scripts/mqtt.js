@@ -15,9 +15,7 @@ var mqtt = function() {
     var sendFreq = 900;         // how often msg sent (hoist checks level)
     var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
 
-    var initAltitude = 0;       // the offset set by zeroAltitude
-    var currAltitude = 0;
-    var seaLevelPressure;
+    var currHeight;
     var maxHeight = 1000;
     var maxHeightReached = false;
     var timeFromGnd = 0;            // sec from ground determined from hoistTimer
@@ -33,7 +31,7 @@ var mqtt = function() {
     var movingInterval;         // sends msgs while arrows held down at sendFreq
     var connectedNoMsg;         // interval reconnect tried when no message received
     var hoistTimer;           // interval to keep track off timeFromGnd
-    var recoverTimeFromGnd;     // interval that sends time from ground on disconnects
+    var recoverTimeHeight;     // interval that sends time from ground on disconnects
     var cycleTimer;             // times active duty time
 
     /* ----- INITIALIZING FUNCTIONS ----- */
@@ -46,7 +44,7 @@ var mqtt = function() {
         DOM.document = $(document);
         DOM.port = 9001;
         if (backupBroker)
-            DOM.host = $('#backuppi').val();
+            DOM.host = $('#lowerpi').val();
         else
             DOM.host = $('#upperpi').val();
 
@@ -85,18 +83,14 @@ var mqtt = function() {
         DOM.resetIpAddr = $('#set-ip-addr');
         DOM.maxHeightInput = $('#max-height');
         DOM.setMaxHeight = $('#set-max-height');
-        DOM.setCycleTime = $('#set-cycle-time');
+        //DOM.setCycleTime = $('#set-cycle-time');
 
         // Data
         DOM.angle = $('#angle');
-        DOM.altitude = $('#altitude');
-        DOM.temperature = $('#temperature');
-        DOM.pressure = $('#pressure');
+        DOM.height = $('#height');
         DOM.angleAnimation = $("#angle-animation");
         DOM.zeroAngle = $('#zero-angle');
-        DOM.zeroAltitude = $('#zero-altitude');
-        DOM.seaLevelPressure = $('#sea-level-pressure');
-        DOM.setSeaLevelPressure = $('#set-sea-level-pressure');
+        DOM.zeroHeight = $('#zero-height');
     }
 
     function getSessionStorage() {
@@ -108,22 +102,12 @@ var mqtt = function() {
         if (sessionStorage.getItem("lower-ip") != null)
             $('#lowerpi').val(sessionStorage.getItem("lower-ip"));
 
-        if (sessionStorage.getItem("backup-ip") != null)
-            $('#backuppi').val(sessionStorage.getItem("backup-ip"));
-
         if (sessionStorage.getItem("backup-broker") != null)
             backupBroker = sessionStorage.getItem("backup-broker");
 
         if (sessionStorage.getItem("max-height") != null) {
             maxHeight = sessionStorage.getItem("max-height");
             $('#max-height').val(maxHeight + " ft");
-        }
-        if (sessionStorage.getItem("sea-level-pressure") != null) {
-            seaLevelPressure = sessionStorage.getItem("sea-level-pressure");
-            $('#sea-level-pressure').val(seaLevelPressure + " inHg");
-        }
-        if (sessionStorage.getItem("init-altitude") != null) {
-            initAltitude = sessionStorage.getItem("init-altitude") ;
         }
     }
 
@@ -175,7 +159,7 @@ var mqtt = function() {
 
         // Zeroing data
         DOM.zeroAngle.on('click', zeroAngle);
-        DOM.zeroAltitude.on('click', zeroAltitude);
+        DOM.zeroHeight.on('click', zeroHeight);
 
         // Error popup and options
         DOM.closeError.on('click', closeError);
@@ -190,7 +174,6 @@ var mqtt = function() {
         DOM.closeSettings.on('click', toggleSettings);
         DOM.replaceWithBackup.on('click', connectBackupPi);
         DOM.resetIpAddr.on('click', resetIpAddr);
-        DOM.setSeaLevelPressure.on('click', setSeaLevelPressure);
         DOM.setMaxHeight.on('click', setMaxHeight);
         DOM.maxHeightInput.on('click', function() {
             DOM.maxHeightInput.val('');
@@ -226,22 +209,28 @@ var mqtt = function() {
         client.subscribe("status");
         client.subscribe("accelerometer/angle");
         client.subscribe("accelerometer/status");
-        client.subscribe("altimeter/altitude");
-        client.subscribe("altimeter/pressure");
-        client.subscribe("altimeter/temperature");
+        client.subscribe("height");
 
         bindEvents();
 
         // Retrieves in case of page refresh (last time msg received from Pi)
-        if (sessionStorage.getItem("accel-disconnected") != null)
+        if (sessionStorage.getItem("accel-disconnected") != null) {
             accelDisconnected = sessionStorage.getItem("accel-disconnected");
-        if (sessionStorage.getItem('time-from-ground') != null)
+        } if (sessionStorage.getItem('time-from-ground') != null) {
             timeFromGnd = Number(sessionStorage.getItem('time-from-ground'));
-        if (sessionStorage.getItem('operation-time') != null)
+        } if (sessionStorage.getItem('operation-time') != null) {
             operationTime = Number(sessionStorage.getItem('operation-time'));
+        }
 
         displayTime(timeFromGnd, DOM.timeFromGnd);
         displayTime(operationTime, DOM.operationTime);
+
+        currHeight = sessionStorage.getItem("curr-height");
+        if (currHeight == null) {
+            DOM.height.html("Disconnected");
+        } else {
+            DOM.height.html(currHeight + " ft");
+        }
 
         // Setup for disconnected accelerometer. UI not expecting messages
         if (accelDisconnected) {
@@ -259,20 +248,21 @@ var mqtt = function() {
 
         // UI expecting messages but isn't getting them
         else if (!accelDisconnected) {
-
             // Connection to broker and should be receiving angle but it isn't
             // (client not running)
             connectedNoMsg = setTimeout(function() {
                 onFailure();
                 console.log('no message received');
             }, 4000);
-
             // Tries to send last stored timeFromGnd continuously in case of
             // disconnect so next Pi connected doesn't reset it to 0
-            recoverTimeFromGnd = setInterval( function() {
+            recoverTimeHeight = setInterval( function() {
                 try {
                     client.send(newMsg(timeFromGnd.toString(), 'time/fromground'));
-                    console.log('sending time ', timeFromGnd.toString());
+                    if (currHeight != null) {
+                        client.send(newMsg(currHeight.toString(), 'height'));
+                    }
+                    console.log('sending time ', timeFromGnd.toString() + " and height " + currHeight);
                 } catch {
                     console.log('send time failed');
                 }
@@ -285,10 +275,12 @@ var mqtt = function() {
         var topic = message.destinationName;
 
         clearTimeout(connectedNoMsg);
-        clearInterval(recoverTimeFromGnd);
+        clearInterval(recoverTimeHeight);
 
-        // not sub'd initially so it doesn't get its own messages
+        // Not sub'd initially so it doesn't get its own messages
+        // Relies on getting accelerometer messages to get time + height
         client.subscribe('time/fromground');
+        client.subscribe('height');
 
         if ( reconnectAttempt > 0 ) {
             DOM.popupError.hide();
@@ -301,6 +293,7 @@ var mqtt = function() {
             if (msg == "Upper Pi client disconnected") {
                 console.log(msg);
                 client.unsubscribe('time/fromground');
+                client.unsubscribe('height');
             } else if (msg == "Backup Pi client connected") {
                 console.log(msg);
             }
@@ -313,19 +306,16 @@ var mqtt = function() {
                 console.log('accelerometer disconnect');
             }
         } else if (topic == "accelerometer/angle") {
-            renderAccelerometerData(msg);
-        } else if (topic == "altimeter/altitude") {
-            renderAltimeterData(DOM.altitude, msg);
-        } else if (topic == "altimeter/temperature") {
-            renderAltimeterData(DOM.temperature, msg);
-        } else if (topic == "altimeter/pressure") {
-            renderAltimeterData(DOM.pressure, msg);
+            renderAngle(msg);
         } else if (topic == "time/fromground") {
             timeFromGnd = Number(msg);
-            console.log('time from ground received: ' + timeFromGnd);
+            //console.log('time from ground received: ' + timeFromGnd);
             sessionStorage.setItem("time-from-ground", timeFromGnd);
             displayTime(timeFromGnd, DOM.timeFromGnd);
+        } else if (topic == "height") {
+            renderHeight(msg);
         }
+
     }
 
     function onFailure() {
@@ -338,7 +328,7 @@ var mqtt = function() {
         console.log(responseObject);
 
         if (responseObject.errorCode == 5){
-            location.reload();
+            //location.reload();
         }
         else {
             reconnect();
@@ -363,7 +353,7 @@ var mqtt = function() {
         }
 
         clearTimeout(reload);
-        clearInterval(recoverTimeFromGnd);
+        clearInterval(recoverTimeHeight);
         console.log('reconnecting');
         DOM.errorMsg.html("Hoist controls disconnected. Reconnect attempt: " + reconnectAttempt);
 
@@ -381,20 +371,17 @@ var mqtt = function() {
 
     function connectBackupPi() {
         sessionStorage.setItem("accel-disconnected", false);
-
+        DOM.height.html("Disconnected");
         try {
             client.send(newMsg("Switch to backup", 'hoist'));
         } catch {
             backupBroker = true;
             sessionStorage.setItem('backup-broker', true);
-            DOM.host = $('#backuppi').val();
+            DOM.host = $('#lowerpi').val();
             DOM.errorMsg.append("<br><br>Connecting to backup...");
             DOM.replaceWithBackup.hide();
-            //DOM.noLeveling.hide();
-            //DOM.switchBackup.hide();
             mqttConnect();
         }
-
     }
 
 
@@ -409,6 +396,7 @@ var mqtt = function() {
         if (backup) {
             DOM.noLeveling.addClass("center");
             DOM.switchBackup.hide();
+            DOM.noLeveling.on('click', closeError.bind(null, "Disable leveling"));
         } else {
             DOM.noLeveling.removeClass("center");
             DOM.switchBackup.show();
@@ -423,45 +411,10 @@ var mqtt = function() {
         });
     }
 
-    // Processes accelerometer data from MQTT messages and displays it
-    function renderAccelerometerData(msg) {
-        msg = Number(msg).toFixed(1);
-        DOM.angle.html(msg + "&deg");
-        rotateAnimation(msg);
-    }
-
-    // Processes altimeter data from MQTT messages and displays it
-    function renderAltimeterData(typeDisplay, msg) {
-
-        var unit, nullVal;
-        var type = typeDisplay.attr("id");
-        msg = Number(msg);
-
-        if (isNaN(msg) || msg == nullVal) {
-            typeDisplay.html("Disconnected");
-            return;
-        } else if (type == "altitude") {
-            unit = " ft";
-            nullVal = -676.9
-            currAltitude = msg * 3.281;
-            msg = (currAltitude - initAltitude).toFixed(2);
-            if (msg >= maxHeight && !maxHeightReached) {
-                notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
-                maxHeightReached = true;
-            }
-        } else if (type == "temperature") {
-            unit = "&degF";
-            nullVal = -212.3;
-        } else if (type == "pressure") {
-            unit = " inHg";
-            nullVal = 1100;
-        }
-
-        typeDisplay.html(msg + unit);
-    }
-
-    // Rotates the bar animation
-    function rotateAnimation(degrees) {
+    // Processes accelerometer data from MQTT msg, displays and animates it
+    function renderAngle(msg) {
+        degrees = Number(msg).toFixed(1);
+        DOM.angle.html(degrees + "&deg");
 
         if (degrees > 25 || degrees < -25) {
             DOM.angleAnimation.css({'background': '#ff8a65'});
@@ -478,6 +431,22 @@ var mqtt = function() {
                 'transform': 'rotate('+degrees+'deg)',
                 'background': '#a5d6a7'
             });
+        }
+    }
+
+    // Processes rotary encoder data from MQTT messages and displays it
+    function renderHeight(msg) {
+        currHeight = Number(msg).toFixed(2);
+        sessionStorage.setItem("curr-height", currHeight);
+        DOM.height.html(currHeight + " ft");
+
+        if (currHeight <= maxHeight - 2.7 && currHeight >= maxHeight - 3.3) {
+            notification('You are 3 feet away from reaching the maximum height of ' + maxHeight + ' feet.', null);
+            client.send(newMsg('Off', 'hoist'));
+        } else if (currHeight >= maxHeight && !maxHeightReached) {
+           notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
+           maxHeightReached = true;
+           client.send(newMsg('Off', 'hoist'));
         }
     }
 
@@ -679,8 +648,10 @@ var mqtt = function() {
             sessionStorage.setItem("accel-disconnected", true);
         } else if (action == "Switch to backup") {
             client.send(newMsg(action, 'hoist'));
+            DOM.height.html("Disconnected");
+            // no longer disconnected w new Pi
             accelDisconnected = false;
-            sessionStorage.setItem("accel-disconnected", true);
+            sessionStorage.setItem("accel-disconnected", false);
         }
     }
 
@@ -697,17 +668,17 @@ var mqtt = function() {
         });
     }
 
-    function zeroAltitude() {
+    function zeroHeight() {
         DOM.popupSettings.hide();
         DOM.popupConfirm.toggle();
 
         DOM.confirmHeader.html('Are you sure?');
-        DOM.confirmMsg.html('Click confirm to zero the altitude. The hoist should be on the ground to maximize accuracy.');
+        DOM.confirmMsg.html('Click confirm to zero the height from the ground. This will delete ALL height data from this session.');
 
         DOM.confirmYes.on('click', function() {
+            client.send(newMsg('Zero height', 'height/status'));
             DOM.popupConfirm.hide();
-            initAltitude = currAltitude;
-            sessionStorage.setItem("init-altitude", initAltitude);
+            sessionStorage.setItem("curr-height", 0);
         });
     }
 
@@ -743,7 +714,6 @@ var mqtt = function() {
             DOM.popupConfirm.css({'z-index': '1'});
             sessionStorage.setItem("upper-ip", $('#upperpi').val());
             sessionStorage.setItem("lower-ip", $('#lowerpi').val());
-            sessionStorage.setItem("backup-ip", $('#backuppi').val());
             location.reload();
         });
     }
@@ -763,27 +733,6 @@ var mqtt = function() {
             maxHeight = tempVal;
             DOM.maxHeightInput.val(maxHeight + " ft");
             sessionStorage.setItem("max-height", maxHeight);
-        });
-    }
-
-    function setSeaLevelPressure(e) {
-        e.preventDefault();
-        DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
-        DOM.popupConfirm.css({'z-index': '3'});
-
-        var tempVal = parseFloat(DOM.seaLevelPressure.val())
-        DOM.confirmMsg.html("Click confirm to set the local sea level pressure to " + tempVal + " inHg. This should be obtained from local weather reports");
-
-        DOM.confirmYes.on('click', function() {
-            DOM.popupConfirm.hide();
-            DOM.popupConfirm.css({'z-index': '1'});
-            seaLevelPressure = tempVal;
-            DOM.seaLevelPressure.val(seaLevelPressure + " inHg");
-            sessionStorage.setItem("sea-level-pressure", seaLevelPressure);
-
-            seaLevelPressure = (seaLevelPressure*3386.39).toString();
-            client.send(newMsg(seaLevelPressure, 'altimeter/sealevelpressure'))
         });
     }
 

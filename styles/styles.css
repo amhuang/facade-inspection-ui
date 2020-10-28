@@ -28,16 +28,16 @@ h2 {  /* Stats and data text */
 	font-weight: 500;
 	color: white;
 	opacity: .9;
-	font-size: 13pt;
+	font-size: 14pt;
 	letter-spacing: 0.009375em;
 }
 h3 { /* Stats and data labels */
 	position: relative;
-	padding-top: 12px;
+	padding-top: 14px;
 	margin-top: 0;
-	margin-bottom: 6px;
+	margin-bottom: 8px;
 	font-family: 'Roboto';
-	font-size: 10pt;
+	font-size: 11pt;
 	color: white;
 	opacity: 0.6;
 	letter-spacing: 0.009375em;
@@ -68,7 +68,7 @@ p { /* Alert popup text */
 	line-height: 1.25em;
 	z-index: 1;
 	color: #121212;
-	font-size: 13pt;
+	font-size: 14pt;
 	letter-spacing: 0.009375em;
 }
 p.light {
@@ -92,7 +92,7 @@ form.set-val {
 	margin: 10px 0 10px 0;
 	display: grid;
 	grid-template-columns: 90px 1fr 20px;
-	grid-template-rows: 30px 30px 30px;
+	grid-template-rows: 30px 30px;
 	grid-gap: 5px 15px;
 	align-items: center;
 }
@@ -303,7 +303,7 @@ button.set-val:hover {
 	align-items: center;
 	justify-content: center;
 	background-color: #121212;
-	margin-top: 52px;
+	margin-top: 110px;
 	margin-bottom: 70px;
 }
 .hoist-control.sub {
@@ -385,26 +385,6 @@ button.set-val:hover {
 .small-arrow.active {
 	opacity: 1;
 }
-/*
-.semicircle {
-	position: relative;
-	left: 50%;
-	-webkit-transform: translateX(-50%);
-	transform: translateX(-50%);
-	width: 70px;
-	height: 35px;
-}
-.semicircle.upper {
-	top: 38%;
-	background-color: #81C784;
-	border-radius: 105px 105px 0 0;
-}
-.semicircle.lower {
-	top: 50%;
-	background-color: #81C784;
-	border-radius: 0 0 105px 105px;
-}
-*/
 .stats {
 	position: absolute;
 	bottom: 0px;
@@ -417,14 +397,14 @@ button.set-val:hover {
 .cell {
 	background-color: #1E1E1E;
 	outline: none;
-	margin: 0 10px 10px 10px;
-	height: 64px;
+	margin: 0 10px 18px 10px;
+	height: 78px;
 	border-radius: 4px;
-	padding-left: 14px;
-	padding-right: 14px;
+	padding-left: 16px;
+	padding-right: 16px;
 }
 .cell.angle {
-	height: 136px;
+	height: 148px;
 }
 .cell.mode {
 	margin: 10px 10px 0px 10px;
@@ -444,12 +424,12 @@ button.set-val:hover {
 	transition: .2s;
 }
 .zero.angle {
-	bottom: 368px;
-	right: 16px;
+	bottom: 261px;
+	right: 18px;
 }
-.zero.altitude {
-	bottom: 222px;
-	right: 16px;
+.zero.height {
+	bottom: 95px;
+	right: 18px;
 }
 .zero:hover {
 	opacity: .9;
@@ -472,14 +452,14 @@ button.set-val:hover {
 }
 .popup.error {
 	display: none;
-	width: 420px;
+	width: 440px;
 	background-color: #CF6679;
 	z-index: 2;
 }
 .popup.confirm {
 	display: none;
 	background-color: #2c2c2c;
-	width: 420px;
+	width: 440px;
 	z-index: 1;
 }
 .popup.settings {
