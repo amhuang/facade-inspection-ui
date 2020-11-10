@@ -19,10 +19,7 @@
 		<button class="popup-option" id="no-leveling">
 			<p>Disable leveling</p>
 		</button>
-		<!-- <button class="popup-option right" id="cancel-error">
-			<p>Connect to backup</p>
-		</button> -->
-		<button class="popup-option right" id="switch-backup">
+		<button class="popup-option right" id="err-switch-backup">
 			<p>Connect to backup</p>
 		</button>
 		<button class="popup-option center" id="replace-with-backup">
@@ -49,27 +46,24 @@
 			<p class='settings'>Time from ground: </p>
 			<p class='settings' id='time-from-ground'>0:00</p>
 
-			<p class='settings'>BLANK: </p>
-			<input class='set-val operation' type='text' placeholder='30inHg' id='sea-level-pressure'>
-			<button class='set-val' id='set-sea-level-pressure'></button>
-
-			<!--
-			<p class='light'>Active cycle time: </p>
-			<input class='set-val operation' type='text' placeholder='15 min'>
-			<button class='set-val' id='set-cycle-time'></button>
-			-->
-			<p class='settings'>Total operation time: </p>
-			<p class='settings' id='operation-time'>0:00</p>
-
 			<p class='settings'>Maximum height: </p>
 			<input class='set-val operation' type='text' placeholder='30ft' id='max-height'>
 			<button class='set-val' id='set-max-height'></button>
+
+			<p class='settings'>Total operation time: </p>
+			<p class='settings' id='operation-time'>0:00</p>
+
+			<!--
+			<p class='settings'>Sea level pressure: </p>
+			<input class='set-val operation' type='text' placeholder='30inHg' id='sea-level-pressure'>
+			<button class='set-val' id='set-sea-level-pressure'></button>
+			-->
 
 		</div>
 		<hr>
 		<form class='set-val'>
 			<label class='set-val' for='upperpi'>Upper Pi IP  </label>
-			<input class='set-val' type='text' id='upperpi' value='192.168.1.235'>
+			<input class='set-val' type='text' id='upperpi' value='192.168.1.226'>
 			<p></p>
 			<label class='set-val' for='lowerpi'>Lower Pi IP  </label>
 			<input class='set-val' type='text' id='lowerpi' value='192.168.1.137'>
@@ -81,6 +75,9 @@
 		</button>
 		<button class="popup-option right" id="toggle-leveling">
 			<p class="light">Disable leveling</p>
+		</button>
+		<button class="popup-option" id="man-switch-backup">
+			<p class="light">Switch to backup</p>
 		</button>
 	</div>
 
@@ -262,16 +259,22 @@
 				<button class="zero angle" id="zero-angle"><h3 style="opacity:1;">&rarr;0&larr;</h3></button>
 				<div id="angle-animation"></div>
 			</div>
-			<div class="cell">
-				<h3>Height</h3>
+			<div class="cell height">
+				<h3>Altitude</h3>
 				<h2 id="height">N/A</h2>
 				<button class="zero height" id="zero-height"><h3 style="opacity:1;">&rarr;0&larr;</h3></button>
+				<button class="zero download">
+					<a id="download-height">
+						<h3 style="opacity:1;padding-top:0;"><u style="font-size: 13pt;">&darr;</u></h3>
+					</a>
+				</button>
 			</div>
 		</div>
 	</div>
 
 	<script src="scripts/mqtt.js" type="text/javascript"></script>
 	<script src="scripts/livestream.js" type="text/javascript"></script>
+
 	<script>
 		mqtt.init();
 		livestream.init();

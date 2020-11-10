@@ -13,26 +13,28 @@ var mqtt = function() {
     var indivHoistMode = false;
     var levelingEnabled = true;
     var sendFreq = 900;         // how often msg sent (hoist checks level)
-    var reconnectAttempt = 0;   // only equals 0 the first time GUI is loaded
+    var reconnectAttempt = 0;   // only equals 0 first time UI is loaded
 
+    var initHeight = 0;         // offset set by zeroHeight
     var currHeight;
     var maxHeight = 1000;
     var maxHeightReached = false;
-    var timeFromGnd = 0;            // sec from ground determined from hoistTimer
+    var timeFromGnd = 0;            // sec from ground from hoistTimer
     var operationTime = 0;
     var accelDisconnected = false;
-    var backupBroker = false;       // UI connected to backup broker
+    var backupBroker = false;       // if UI connected to backup broker
+    var heightStore = [];          // array storing heights
+    var startTime = 0;
 
     // Timeouts
     var holdTimeout;            // delays hoist operation by minPress
     var reload;                 // delay before page reload
 
     // Intervals
-    var movingInterval;         // sends msgs while arrows held down at sendFreq
-    var connectedNoMsg;         // interval reconnect tried when no message received
-    var hoistTimer;           // interval to keep track off timeFromGnd
-    var recoverTimeHeight;     // interval that sends time from ground on disconnects
-    var cycleTimer;             // times active duty time
+    var movingInterval;     // sends msgs while arrows held down at sendFreq
+    var connectedNoMsg;     // reconnection attempts when no message received
+    var hoistTimer;         // keeps track off timeFromGnd
+    var recoverTimeHeight;  // sends time from ground on disconnects
 
     /* ----- INITIALIZING FUNCTIONS ----- */
 
@@ -62,7 +64,7 @@ var mqtt = function() {
         DOM.errorMsg = $('#error-msg');
         DOM.closeError = $('#close-error');
         DOM.noLeveling = $("#no-leveling");
-        DOM.switchBackup = $("#switch-backup");
+        DOM.errSwitchBackup = $("#err-switch-backup");
         DOM.replaceWithBackup = $("#replace-with-backup");
 
         // Confirm popup and options
@@ -83,6 +85,7 @@ var mqtt = function() {
         DOM.resetIpAddr = $('#set-ip-addr');
         DOM.maxHeightInput = $('#max-height');
         DOM.setMaxHeight = $('#set-max-height');
+        DOM.manSwitchBackup = $('#man-switch-backup');
         //DOM.setCycleTime = $('#set-cycle-time');
 
         // Data
@@ -91,6 +94,7 @@ var mqtt = function() {
         DOM.angleAnimation = $("#angle-animation");
         DOM.zeroAngle = $('#zero-angle');
         DOM.zeroHeight = $('#zero-height');
+        DOM.downloadHeight = $('#download-height');
     }
 
     function getSessionStorage() {
@@ -108,6 +112,10 @@ var mqtt = function() {
         if (sessionStorage.getItem("max-height") != null) {
             maxHeight = sessionStorage.getItem("max-height");
             $('#max-height').val(maxHeight + " ft");
+        }
+
+        if (sessionStorage.getItem("height-store") != null) {
+            heightStore = JSON.parse(sessionStorage.getItem("height-store"));
         }
     }
 
@@ -164,12 +172,12 @@ var mqtt = function() {
         // Error popup and options
         DOM.closeError.on('click', closeError);
         DOM.noLeveling.on('click', closeError.bind(null, "Disable leveling"));
-        DOM.switchBackup.on('click', closeError.bind(null, "Switch to backup"));
+        DOM.errSwitchBackup.on('click', closeError.bind(null, "Switch to backup"));
     }
 
     function bindSettings() {
-        /* Binds event listeners in settings which don't rely on sending MQTT
-        messages so they're accessible even when the GUI isn't connected */
+        // Binds event listeners in settings which don't rely on sending MQTT
+        // messages so they're accessible even when the UI isn't connected
         DOM.showSettings.on('click', toggleSettings);
         DOM.closeSettings.on('click', toggleSettings);
         DOM.replaceWithBackup.on('click', connectBackupPi);
@@ -181,6 +189,10 @@ var mqtt = function() {
         DOM.confirmNo.on('click', function() {
             DOM.popupConfirm.hide()
         });
+        DOM.manSwitchBackup.on('click', manSwitchBackup);
+
+        // Not in settings but doesn't rely on MQTT
+        DOM.downloadHeight.on('click', downloadHeight);
     }
 
 
@@ -193,7 +205,7 @@ var mqtt = function() {
         client.onMessageArrived = onMessageArrived;
 
         var options = {
-            timeout: 3,
+            timeout: 5,
             onSuccess: onConnect,
             onFailure: onFailure,
             keepAliveInterval: 5,
@@ -225,11 +237,15 @@ var mqtt = function() {
         displayTime(timeFromGnd, DOM.timeFromGnd);
         displayTime(operationTime, DOM.operationTime);
 
-        currHeight = sessionStorage.getItem("curr-height");
+        if (sessionStorage.getItem('init-height') != null) {
+            initHeight = Number(sessionStorage.getItem('init-height'));
+        }
+        currHeight = Number(sessionStorage.getItem("curr-height"));
         if (currHeight == null) {
             DOM.height.html("Disconnected");
         } else {
-            DOM.height.html(currHeight + " ft");
+            DOM.height.html((currHeight-initHeight) + " ft");
+            //DOM.height.html(currHeight + " ft");
         }
 
         // Setup for disconnected accelerometer. UI not expecting messages
@@ -313,7 +329,8 @@ var mqtt = function() {
             sessionStorage.setItem("time-from-ground", timeFromGnd);
             displayTime(timeFromGnd, DOM.timeFromGnd);
         } else if (topic == "height") {
-            renderHeight(msg);
+            renderAlt(msg);
+            //renderHeight(msg);
         }
 
     }
@@ -340,7 +357,7 @@ var mqtt = function() {
             DOM.popupError.show();
             DOM.closeError.hide();
             DOM.noLeveling.hide();
-            DOM.switchBackup.hide();
+            DOM.errSwitchBackup.hide();
             if (!backupBroker) {
                 DOM.replaceWithBackup.show();
             }
@@ -382,149 +399,6 @@ var mqtt = function() {
             DOM.replaceWithBackup.hide();
             mqttConnect();
         }
-    }
-
-
-    /* ----- DATA HANDLING & ANIMATIONS ----- */
-
-    function accelerometerError(backup=false) {
-        DOM.popupError.show();
-        DOM.closeError.show();
-        DOM.replaceWithBackup.hide();
-        DOM.noLeveling.show();
-
-        if (backup) {
-            DOM.noLeveling.addClass("center");
-            DOM.switchBackup.hide();
-            DOM.noLeveling.on('click', closeError.bind(null, "Disable leveling"));
-        } else {
-            DOM.noLeveling.removeClass("center");
-            DOM.switchBackup.show();
-        }
-
-        DOM.errorMsg.html("The accelerometer is disconnected. If you continue, there will be no leveling.");
-        DOM.angle.html("Disconnected");
-        DOM.angleAnimation.css({
-            '-webkit-transform': 'rotate(0deg)',
-            'transform': 'rotate(0deg)',
-            'background': 'grey'
-        });
-    }
-
-    // Processes accelerometer data from MQTT msg, displays and animates it
-    function renderAngle(msg) {
-        degrees = Number(msg).toFixed(1);
-        DOM.angle.html(degrees + "&deg");
-
-        if (degrees > 25 || degrees < -25) {
-            DOM.angleAnimation.css({'background': '#ff8a65'});
-        }
-        else if (degrees > 2 || degrees < -2) {
-            DOM.angleAnimation.css({
-                '-webkit-transform': 'rotate('+degrees+'deg)',
-                'transform': 'rotate('+degrees+'deg)',
-                'background': '#ffe680'
-            });
-        } else {
-            DOM.angleAnimation.css({
-                '-webkit-transform': 'rotate('+degrees+'deg)',
-                'transform': 'rotate('+degrees+'deg)',
-                'background': '#a5d6a7'
-            });
-        }
-    }
-
-    // Processes rotary encoder data from MQTT messages and displays it
-    function renderHeight(msg) {
-        currHeight = Number(msg).toFixed(2);
-        sessionStorage.setItem("curr-height", currHeight);
-        DOM.height.html(currHeight + " ft");
-
-        if (currHeight <= maxHeight - 2.7 && currHeight >= maxHeight - 3.3) {
-            notification('You are 3 feet away from reaching the maximum height of ' + maxHeight + ' feet.', null);
-            client.send(newMsg('Off', 'hoist'));
-        } else if (currHeight >= maxHeight && !maxHeightReached) {
-           notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
-           maxHeightReached = true;
-           client.send(newMsg('Off', 'hoist'));
-        }
-    }
-
-    function timer(msg) {
-        if (msg == 'Up') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd += 1;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg == 'Down') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd -= 1;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime)
-                if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
-                    notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
-                }
-            }, 1000);
-        } else if (msg == 'Up left' || msg == 'Up right') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd += 0.5;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg == 'Down left' || msg == 'Down right') {
-            hoistTimer = setInterval(function() {
-                timeFromGnd -= 0.5;
-                operationTime += 1;
-                displayTime(timeFromGnd, DOM.timeFromGnd);
-                displayTime(operationTime, DOM.operationTime);
-            }, 1000);
-        } else if (msg = 'Off') {
-            clearInterval(hoistTimer);
-        }
-        sessionStorage.setItem("operation-time", operationTime);
-    }
-
-    function displayTime(time, text) {
-        // Takes time as seconds
-        var min = Math.floor(Math.abs(time)/60);
-        var sec = Math.floor(Math.abs(time)%60);
-        if (sec < 10) {
-            sec = '0' + sec;
-        }
-        if (time < 0) {
-            text.html('-' + min + ':' + sec);
-        }
-        else {
-            text.html(min + ':' + sec);
-        }
-    }
-
-    function notification(message, header) {
-        client.send(newMsg('Off', 'hoist'));
-        DOM.popupConfirm.toggle();
-
-        if (DOM.confirmHeader.html() == null) {
-            DOM.confirmHeader.hide();
-        } else {
-            DOM.confirmHeader.html(header);
-        }
-
-        DOM.confirmMsg.html(message);
-        DOM.confirmYes.addClass('center');
-        DOM.confirmYes.children().html('Continue');
-        DOM.confirmNo.hide();
-
-        DOM.confirmYes.on('click', function() {
-            DOM.popupConfirm.hide();
-            DOM.confirmHeader.show();
-            DOM.confirmYes.removeClass('center');
-            DOM.confirmYes.children().html('Confirm');
-            DOM.confirmNo.show();
-        });
     }
 
 
@@ -634,7 +508,7 @@ var mqtt = function() {
 
         DOM.popupError.hide();
         DOM.noLeveling.hide();
-        DOM.switchBackup.hide();
+        DOM.errSwitchBackup.hide();
         DOM.errorMsg.html("");
 
         if (action == "default") {
@@ -656,11 +530,7 @@ var mqtt = function() {
     }
 
     function zeroAngle() {
-        DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
-
-        DOM.confirmHeader.html('Are you sure?');
-        DOM.confirmMsg.html('Click confirm to zero the angle. The hoist should be on the ground to maximize accuracy.');
+        confirmation('Click confirm to zero the angle. The hoist should be on the ground to maximize accuracy.');
 
         DOM.confirmYes.on('click', function() {
             client.send(newMsg('Zero accelerometer', 'accelerometer/status'));
@@ -669,15 +539,15 @@ var mqtt = function() {
     }
 
     function zeroHeight() {
-        DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
-
-        DOM.confirmHeader.html('Are you sure?');
-        DOM.confirmMsg.html('Click confirm to zero the height from the ground. This will delete ALL height data from this session.');
+        confirmation('Click confirm to zero the height from the ground. This will delete ALL height data from this session.');
+        heightStore = [];
 
         DOM.confirmYes.on('click', function() {
             client.send(newMsg('Zero height', 'height/status'));
+            console.log("height zeroed by ", currHeight);
+            initHeight = currHeight;
             DOM.popupConfirm.hide();
+            sessionStorage.setItem("init-height", initHeight);
             sessionStorage.setItem("curr-height", 0);
         });
     }
@@ -704,10 +574,9 @@ var mqtt = function() {
 
     function resetIpAddr(e) {
         e.preventDefault();
-        DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
+
         DOM.popupConfirm.css({'z-index': '3'});
-        DOM.confirmMsg.html('Click confirm to change the IP addresses you are connected to and to and reload the page.');
+        confirmation('Click confirm to change the IP addresses you are connected to and to and reload the page.');
 
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
@@ -720,12 +589,9 @@ var mqtt = function() {
 
     function setMaxHeight(e) {
         e.preventDefault();
-        DOM.popupSettings.hide();
-        DOM.popupConfirm.toggle();
         DOM.popupConfirm.css({'z-index': '3'});
-
         var tempVal = parseFloat(DOM.maxHeightInput.val());
-        DOM.confirmMsg.html("Click confirm to set the maximum operating height to " + tempVal + " feet.");
+        confirmation("Click confirm to set the maximum operating height to " + tempVal + " feet.");
 
         DOM.confirmYes.on('click', function() {
             DOM.popupConfirm.hide();
@@ -736,6 +602,211 @@ var mqtt = function() {
         });
     }
 
+    function downloadHeight() {
+        confirmation('Click confirm to download the height and time data as a JSON file.');
+
+        DOM.confirmYes.on('click', function() {
+            let data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(heightStore));
+            DOM.downloadHeight.attr("href", data);
+            DOM.downloadHeight.attr("download", "height.json");
+            DOM.downloadHeight.click();
+            console.log("clicked");
+        });
+    }
+
+
+    /* ----- DATA HANDLING & ANIMATIONS ----- */
+
+    function accelerometerError(backup=false) {
+        DOM.popupError.show();
+        DOM.closeError.show();
+        DOM.replaceWithBackup.hide();
+        DOM.noLeveling.show();
+
+        if (backup) {
+            DOM.noLeveling.addClass("center");
+            DOM.errSwitchBackup.hide();
+            DOM.noLeveling.on('click', closeError.bind(null, "Disable leveling"));
+        } else {
+            DOM.noLeveling.removeClass("center");
+            DOM.errSwitchBackup.show();
+        }
+
+        DOM.errorMsg.html("The accelerometer is disconnected. If you continue, there will be no leveling.");
+        DOM.angle.html("Disconnected");
+        DOM.angleAnimation.css({
+            '-webkit-transform': 'rotate(0deg)',
+            'transform': 'rotate(0deg)',
+            'background': 'grey'
+        });
+    }
+
+    // Processes accelerometer data from MQTT msg, displays and animates it
+    function renderAngle(msg) {
+        degrees = Number(msg).toFixed(1);
+        DOM.angle.html(degrees + "&deg");
+
+        if (degrees > 25 || degrees < -25) {
+            DOM.angleAnimation.css({'background': '#ff8a65'});
+        }
+        else if (degrees > 2 || degrees < -2) {
+            DOM.angleAnimation.css({
+                '-webkit-transform': 'rotate('+degrees+'deg)',
+                'transform': 'rotate('+degrees+'deg)',
+                'background': '#ffe680'
+            });
+        } else {
+            DOM.angleAnimation.css({
+                '-webkit-transform': 'rotate('+degrees+'deg)',
+                'transform': 'rotate('+degrees+'deg)',
+                'background': '#a5d6a7'
+            });
+        }
+    }
+
+    // Processes altimeter data from MQTT messages and displays it
+    function renderAlt(msg) {
+        sessionStorage.setItem("curr-height", currHeight);
+
+        if (isNaN(msg) || msg == -676.9) {
+            DOM.height.html("Disconnected");
+        } else {
+            currHeight = msg * 3.281;
+            sessionStorage.setItem("curr-height", currHeight);
+            let arr = [ (currHeight-initHeight), Date.now() ];
+            heightStore.push(arr);
+            console.log(heightStore);
+            sessionStorage.setItem("height-store", JSON.stringify(heightStore));
+
+            msg = (currHeight - initHeight).toFixed(2);
+            DOM.height.html(msg + " ft");
+
+            if (currHeight <= maxHeight - 2.7 && currHeight >= maxHeight - 3.3) {
+                notification('You are 3 feet away from reaching the maximum height of ' + maxHeight + ' feet.', null);
+                client.send(newMsg('Off', 'hoist'));
+            } else if (currHeight >= maxHeight && !maxHeightReached) {
+               notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
+               maxHeightReached = true;
+               client.send(newMsg('Off', 'hoist'));
+            }
+        }
+    }
+
+    // Processes rotary encoder data from MQTT messages and displays it
+    function renderHeight(msg) {
+        currHeight = Number(msg).toFixed(2);
+        DOM.height.html(currHeight + " ft");
+        sessionStorage.setItem("curr-height", currHeight);
+
+        let arr = [ currHeight-initHeight , Date.now() ];
+        //let arr = [currHeight.toString(), totalTime.toString()];
+        heightStore.push(arr);
+        console.log(heightStore);
+        sessionStorage.setItem("height-store", heightStore);
+
+        if (currHeight <= maxHeight - 2.7 && currHeight >= maxHeight - 3.3) {
+            notification('You are 3 feet away from reaching the maximum height of ' + maxHeight + ' feet.', null);
+            client.send(newMsg('Off', 'hoist'));
+        } else if (currHeight >= maxHeight && !maxHeightReached) {
+           notification('You have reached the maximum operating height of ' + maxHeight + ' feet.', null);
+           maxHeightReached = true;
+           client.send(newMsg('Off', 'hoist'));
+        }
+    }
+
+    function timer(msg) {
+        if (msg == 'Up') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd += 1;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg == 'Down') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd -= 1;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime)
+                if (timeFromGnd < 5.5 && timeFromGnd > 4.5) {
+                    notification('You are ' + Math.round(timeFromGnd) + ' seconds away from the ground.', null);
+                }
+            }, 1000);
+        } else if (msg == 'Up left' || msg == 'Up right') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd += 0.5;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg == 'Down left' || msg == 'Down right') {
+            hoistTimer = setInterval(function() {
+                timeFromGnd -= 0.5;
+                operationTime += 1;
+                displayTime(timeFromGnd, DOM.timeFromGnd);
+                displayTime(operationTime, DOM.operationTime);
+            }, 1000);
+        } else if (msg = 'Off') {
+            clearInterval(hoistTimer);
+        }
+        sessionStorage.setItem("operation-time", operationTime);
+    }
+
+    function displayTime(time, text) {
+        // Takes time as seconds
+        var min = Math.floor(Math.abs(time)/60);
+        var sec = Math.floor(Math.abs(time)%60);
+        if (sec < 10) {
+            sec = '0' + sec;
+        }
+        if (time < 0) {
+            text.html('-' + min + ':' + sec);
+        }
+        else {
+            text.html(min + ':' + sec);
+        }
+    }
+
+    function confirmation(message) {
+        DOM.popupSettings.hide();
+        DOM.popupConfirm.toggle();
+
+        DOM.confirmHeader.html('Are you sure?');
+        DOM.confirmMsg.html(message);
+    }
+
+    function notification(message, header) {
+        client.send(newMsg('Off', 'hoist'));
+        DOM.popupConfirm.toggle();
+
+        if (DOM.confirmHeader.html() == null) {
+            DOM.confirmHeader.hide();
+        } else {
+            DOM.confirmHeader.html(header);
+        }
+
+        DOM.confirmMsg.html(message);
+        DOM.confirmYes.addClass('center');
+        DOM.confirmYes.children().html('Continue');
+        DOM.confirmNo.hide();
+
+        DOM.confirmYes.on('click', function() {
+            DOM.popupConfirm.hide();
+            DOM.confirmHeader.show();
+            DOM.confirmYes.removeClass('center');
+            DOM.confirmYes.children().html('Confirm');
+            DOM.confirmNo.show();
+        });
+    }
+
+    function manSwitchBackup() {
+        confirmation("Clicking confirm will manually switch to the backup system for operating the hoists. Height information will no longer be available using the backup.");
+
+        DOM.confirmYes.on('click', function() {
+            DOM.popupConfirm.hide();
+            connectBackupPi();
+        });
+    }
 
     /* ----- PUBLIC METHODS & EXPORT ----- */
 

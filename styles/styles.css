@@ -376,8 +376,8 @@ button.set-val:hover {
 	left: 50%;
 	top: 50%;
 	padding: 20px 10px 20px 10px;
-	-webkit-transform: translateY(-50%) translateX(-50%);
-	transform: translateY(-50%) translateX(-50%);
+	-webkit-transform: translateX(-50%);
+	transform: translateX(-50%);
 }
 .small-arrow:hover {
 	opacity: .65;
@@ -398,13 +398,15 @@ button.set-val:hover {
 	background-color: #1E1E1E;
 	outline: none;
 	margin: 0 10px 18px 10px;
-	height: 78px;
 	border-radius: 4px;
 	padding-left: 16px;
 	padding-right: 16px;
 }
 .cell.angle {
 	height: 148px;
+}
+.cell.height {
+	height: 100px;
 }
 .cell.mode {
 	margin: 10px 10px 0px 10px;
@@ -424,12 +426,15 @@ button.set-val:hover {
 	transition: .2s;
 }
 .zero.angle {
-	bottom: 261px;
+	bottom: 282px;
 	right: 18px;
 }
 .zero.height {
-	bottom: 95px;
+	bottom: 117px;
 	right: 18px;
+}
+.zero.download {
+	right: 20px;
 }
 .zero:hover {
 	opacity: .9;
@@ -544,37 +549,20 @@ button.set-val:hover {
 .popup-option:hover {
 	filter: brightness(80%);
 }
-#replace-with-backup {
+.popup.error button {
 	background-color: #CF6679;
 	filter: brightness(90%);
 	display: none;
 }
-#replace-with-backup:hover {
-	filter: brightness(80%);
-}
-#switch-backup {
-	background-color: #CF6679;
-	filter: brightness(90%);
-	display: none;
-}
-#no-leveling {
-	background-color: #CF6679;
-	filter: brightness(90%);
-	display: none;
+.popup.settings button {
+	margin-top: 14px;
+	background-color: #404040;
 }
 #confirm-no {
 	background-color: #404040;
 }
 #confirm-yes {
 	background-color: #75a478;
-}
-#make-level {
-	margin-top: 14px;
-	background-color: #404040;
-}
-#toggle-leveling {
-	margin-top: 14px;
-	background-color: #404040;
 }
 #show-settings {
 	-webkit-appearance: none;
