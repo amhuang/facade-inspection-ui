@@ -40,37 +40,18 @@ var livestream = function() {
     }
 
     function bindEvents() {
-        DOM.maximize.eq(0).on('click', fullScreen.bind(null, 0));
-        DOM.maximize.eq(1).on('click', fullScreen.bind(null, 1));
-        DOM.maximize.eq(2).on('click', fullScreen.bind(null, 2));
-        DOM.maximize.eq(3).on('click', fullScreen.bind(null, 3));
-        DOM.maximize.eq(4).on('click', fullScreen.bind(null, 4));
-        DOM.maximize.eq(5).on('click', fullScreen.bind(null, 5));
-        DOM.maximize.eq(6).on('click', fullScreen.bind(null, 6));
-
-        DOM.editing.eq(0).on('click', toggleEdit.bind(null, 0));
-        DOM.editing.eq(1).on('click', toggleEdit.bind(null, 1));
-        DOM.editing.eq(2).on('click', toggleEdit.bind(null, 2));
-        DOM.editing.eq(3).on('click', toggleEdit.bind(null, 3));
-        DOM.editing.eq(4).on('click', toggleEdit.bind(null, 4));
-        DOM.editing.eq(5).on('click', toggleEdit.bind(null, 5));
-        DOM.editing.eq(6).on('click', toggleEdit.bind(null, 6));
-
-        DOM.br.eq(0).on('input', brightness.bind(DOM.br.eq(0), 0));
-        DOM.br.eq(1).on('input', brightness.bind(DOM.br.eq(1), 1));
-        DOM.br.eq(2).on('input', brightness.bind(DOM.br.eq(2), 2));
-        DOM.br.eq(3).on('input', brightness.bind(DOM.br.eq(3), 3));
-        DOM.br.eq(4).on('input', brightness.bind(DOM.br.eq(4), 4));
-        DOM.br.eq(5).on('input', brightness.bind(DOM.br.eq(5), 5));
-        DOM.br.eq(6).on('input', brightness.bind(DOM.br.eq(6), 6));
-
-        DOM.con.eq(0).on('input', contrast.bind(DOM.con.eq(0), 0));
-        DOM.con.eq(1).on('input', contrast.bind(DOM.con.eq(1), 1));
-        DOM.con.eq(2).on('input', contrast.bind(DOM.con.eq(2), 2));
-        DOM.con.on(3).on('input', contrast.bind(DOM.con.eq(3), 3));
-        DOM.con.eq(4).on('input', contrast.bind(DOM.con.eq(4), 4));
-        DOM.con.eq(5).on('input', contrast.bind(DOM.con.eq(5), 5));
-        DOM.con.eq(6).on('input', contrast.bind(DOM.con.eq(6), 6));
+        for (let i=0; i < 7; i++) {
+            DOM.maximize.eq(i).on('click', fullScreen.bind(null, i));
+        }
+        for (let i=0; i < 7; i++) {
+            DOM.editing.eq(i).on('click', toggleEdit.bind(null, i));
+        }
+        for (let i=0; i < 7; i++) {
+            DOM.br.eq(i).on('input', brightness.bind(DOM.br.eq(i), i));
+        }
+        for (let i=0; i < 7; i++) {
+            DOM.con.eq(i).on('input', contrast.bind(DOM.con.eq(i), i));
+        }
     }
 
     function setSrc() {
